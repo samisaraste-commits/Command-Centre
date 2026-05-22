@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Command Centre</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --o:#E8820C;--o2:rgba(232,130,12,0.15);
+      --bg:#0A0A0A;--bg2:#111111;--bg3:#181818;--bg4:#202020;
+      --red:#E74C3C;--red2:rgba(231,76,60,0.12);--red3:rgba(231,76,60,0.25);
+      --green:#2ECC71;--green2:rgba(46,204,113,0.12);
+      --yellow:#C8E830;
+      --t1:#F0EAE0;--t2:#9A8A78;--t3:#5A4A3A;
+      --border:rgba(232,130,12,0.2);--border2:rgba(232,130,12,0.1);
+    }
+    html,body{height:100%;background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px}
+    .shell{max-width:1100px;margin:20px auto;background:var(--bg);border-radius:12px;overflow:hidden;border:1px solid var(--border);box-shadow:0 0 60px rgba(232,130,12,0.05)}
+    .topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 22px;display:flex;align-items:center;justify-content:space-between}
+    .brand{font-size:15px;font-weight:700;letter-spacing:1px;color:var(--o)}
+    .brand span{color:var(--t1);font-weight:400}
+    .nav{display:flex;align-items:center;gap:1px;background:rgba(255,255,255,0.02);border:1px solid rgba(232,130,12,0.08);border-radius:6px;padding:3px}
+    .nb{padding:3px 10px;font-size:9px;border-radius:4px;border:none;background:transparent;color:var(--t3);cursor:pointer;letter-spacing:1.5px;transition:all .2s;text-transform:uppercase;font-weight:400;white-space:nowrap}
+    .nb.on{background:var(--o2);color:var(--o)}
+    .nb:hover:not(.on){color:var(--t2);background:rgba(232,130,12,0.05)}
+    .clock{font-size:12px;color:var(--o);font-variant-numeric:tabular-nums;letter-spacing:.5px}
+    .body{padding:20px}
+    .view{display:none}.view.on{display:block}
+    .scores{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+    .sc{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:14px 16px;position:relative;overflow:hidden}
+    .sc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--o)}
+    .sc-label{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px}
+    .sc-val{font-size:26px;font-weight:300;color:var(--o);line-height:1}
+    .sc-sub{font-size:10px;color:var(--t2);margin-top:3px}
+    .sc-bar{margin-top:10px;height:2px;background:var(--bg4);border-radius:1px}
+    .sc-fill{height:100%;background:var(--o);border-radius:1px;transition:width .4s}
+    .alert{background:rgba(231,76,60,0.07);border:1px solid var(--red3);border-radius:7px;padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+    .adot{width:7px;height:7px;border-radius:50%;background:var(--red);flex-shrink:0;animation:blink 1.5s infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+    .atext{font-size:12px;color:#F08080}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .panel{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:16px}
+    .ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+    .pt{font-size:10px;color:var(--o);text-transform:uppercase;letter-spacing:2px}
+    .plink{font-size:11px;color:var(--t2);cursor:pointer;background:none;border:none;padding:0}
+    .plink:hover{color:var(--o)}
+    .hr{display:flex;align-items:center;gap:10px;padding:8px;margin-bottom:6px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;cursor:pointer;transition:border-color .15s}
+    .hr:last-child{margin-bottom:0}
+    .hr:hover{border-color:var(--border)}
+    .hicon{width:28px;height:28px;border-radius:5px;background:var(--bg4);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+    .hinfo{flex:1;min-width:0}
+    .hname{font-size:12px;color:var(--t1);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .hbar-wrap{height:4px;background:var(--bg4);border-radius:2px;overflow:hidden}
+    .hbar{height:100%;background:var(--o);border-radius:2px;transition:width .3s}
+    .hmeta{font-size:10px;color:var(--t2);margin-top:3px}
+    .hcheck{width:20px;height:20px;border-radius:4px;border:1.5px solid var(--t3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;transition:all .15s}
+    .hcheck.done{border-color:var(--green);background:var(--green2);color:var(--green)}
+    .hcheck.missed{border-color:var(--red);background:var(--red2);color:var(--red);animation:blink 2s infinite}
+    .pr{padding:8px 0;border-bottom:1px solid var(--bg4)}
+    .pr:last-child{border-bottom:none}
+    .prhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+    .prname{font-size:12px;color:var(--t1)}
+    .prpct{font-size:13px;color:var(--o);font-weight:500}
+    .prbar-wrap{height:3px;background:var(--bg4);border-radius:2px;overflow:hidden;margin-bottom:4px}
+    .prbar{height:100%;background:var(--o);border-radius:2px}
+    .prtags{display:flex;gap:5px;flex-wrap:wrap}
+    .tag{font-size:10px;color:var(--t2);background:var(--bg4);padding:2px 6px;border-radius:3px}
+    .missed-section{background:rgba(231,76,60,0.05);border:1px solid var(--red3);border-radius:8px;padding:12px 16px;margin-bottom:16px}
+    .ms-title{font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+    .sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .st{font-size:10px;color:var(--o);text-transform:uppercase;letter-spacing:2px}
+    .add-btn{font-size:11px;color:var(--t2);background:var(--bg3);border:1px solid var(--border2);padding:4px 10px;border-radius:5px;cursor:pointer}
+    .add-btn:hover{color:var(--o);border-color:var(--border)}
+    .fhr{background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:10px 12px;margin-bottom:8px}
+    .fhr:last-child{margin-bottom:0}
+    .fhr-top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+    .fhr-name{flex:1;font-size:13px;color:var(--t1)}
+    .fhr-streak{font-size:12px;color:var(--o);font-weight:500;white-space:nowrap}
+    .fhr-bar-row{display:flex;align-items:center;gap:8px}
+    .fhr-bar-wrap{flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden}
+    .fhr-bar{height:100%;background:var(--o);border-radius:3px;transition:width .3s}
+    .fhr-pb{font-size:10px;color:var(--t2);white-space:nowrap}
+    .fhr-meta{display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap}
+    .fhr-cat{font-size:10px;color:var(--t3);background:var(--bg4);padding:2px 7px;border-radius:3px;text-transform:uppercase;letter-spacing:.5px}
+    .freeze{font-size:10px;color:#7BAFD4;background:rgba(123,175,212,0.1);border:1px solid rgba(123,175,212,0.2);padding:2px 7px;border-radius:3px;cursor:pointer}
+    .freeze:hover{background:rgba(123,175,212,0.2)}
+    .pb-badge{font-size:10px;color:var(--t2);background:var(--bg4);padding:2px 7px;border-radius:3px}
+    .stars{display:flex;gap:3px}
+    .star{width:16px;height:6px;border-radius:2px;background:var(--bg4);cursor:pointer;transition:background .1s}
+    .star.on{background:var(--o)}
+    .fcheck{width:22px;height:22px;border-radius:5px;border:1.5px solid var(--t3);display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;font-size:12px;transition:all .15s}
+    .fcheck.done{border-color:var(--green);background:var(--green2);color:var(--green)}
+    .fcheck.missed{border-color:var(--red);background:var(--red2);color:var(--red)}
+    .heatmap{margin-top:24px}
+    .hm-title{font-size:10px;color:var(--o);text-transform:uppercase;letter-spacing:2px;margin-bottom:12px}
+    .hm-cell{width:12px;height:12px;border-radius:2px}
+    .pcard{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:16px;margin-bottom:10px}
+    .pcard:last-child{margin-bottom:0}
+    .pcard-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+    .pcard-name{font-size:14px;color:var(--t1);font-weight:500}
+    .pcard-pct{font-size:20px;color:var(--o);font-weight:300}
+    .pcard-bar-wrap{height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;margin-bottom:10px}
+    .pcard-bar{height:100%;background:var(--o);border-radius:2px;transition:width .3s}
+    .pcard-tags{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
+    .tasks{border-top:1px solid var(--bg4);padding-top:10px}
+    .task{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;color:var(--t2);cursor:pointer}
+    .task:hover{color:var(--t1)}
+    .tcheck{width:14px;height:14px;border-radius:3px;border:1px solid var(--t3);display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;transition:all .15s}
+    .tcheck.done{border-color:var(--green);background:var(--green2);color:var(--green)}
+    .task.done-task span{text-decoration:line-through;color:var(--t3)}
+    .row-plus{width:22px;height:22px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--t3);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:14px;transition:all .15s}
+    .row-plus:hover{border-color:var(--o);color:var(--o)}
+    @media(max-width:700px){
+      .scores{grid-template-columns:repeat(2,1fr)}
+      .two{grid-template-columns:1fr}
+      .topbar{flex-wrap:wrap;gap:8px}
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div class="brand">COMMAND <span>CENTRE</span></div>
+    <div class="nav">
+      <button class="nb on" onclick="nav('overview')">Overview</button>
+      <button class="nb" onclick="nav('habits')">Daily Habits</button>
+      <button class="nb" onclick="nav('projects')">Projects</button>
+    </div>
+    <div class="clock" id="clk"></div>
+  </div>
+  <div class="body">
+    <div id="v-overview" class="view on">
+      <div class="scores" id="scores"></div>
+      <div class="alert" id="alert-bar" style="display:none"><div class="adot"></div><div class="atext" id="alert-text"></div></div>
+      <div class="two">
+        <div class="panel">
+          <div class="ph"><div class="pt">Today's habits</div><button class="plink" onclick="nav('habits')">View all →</button></div>
+          <div id="ov-habits"></div>
+        </div>
+        <div class="panel">
+          <div class="ph"><div class="pt">Active projects</div><button class="plink" onclick="nav('projects')">View all →</button></div>
+          <div id="ov-projects"></div>
+        </div>
+      </div>
+    </div>
+    <div id="v-habits" class="view">
+      <div id="missed-section" style="display:none" class="missed-section">
+        <div class="ms-title"><div class="adot"></div>Needs attention today</div>
+        <div id="missed-list"></div>
+      </div>
+      <div class="sh"><div class="st">Daily habits</div><button class="add-btn" onclick="addHabit()">+ Add habit</button></div>
+      <div id="full-habits"></div>
+      <div class="heatmap"><div class="hm-title">12-week consistency map</div><div id="heatmap"></div></div>
+    </div>
+    <div id="v-projects" class="view">
+      <div class="sh"><div class="st">Projects</div><button class="add-btn" onclick="addProject()">+ New project</button></div>
+      <div id="full-projects"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const O='#E8820C',GREEN='#2ECC71',YELLOW='#C8E830';
+
+  function hmColor(s){
+    if(s===0)return '#181818';
+    if(s<0.25)return '#2A1A04';
+    if(s<0.5)return O;
+    if(s<0.75)return YELLOW;
+    return GREEN;
+  }
+
+  const habits=[
+    {name:'Meditation',icon:'🧘',cat:'MIND',type:'binary',streak:12,pb:21,status:'done',rating:0,freezes:2},
+    {name:'Gym',icon:'💪',cat:'BODY',type:'binary',streak:7,pb:14,status:'done',rating:0,freezes:1},
+    {name:'Stretching',icon:'🤸',cat:'BODY',type:'binary',streak:3,pb:8,status:'missed',rating:0,freezes:0},
+    {name:'Thought patterns',icon:'🧠',cat:'MIND',type:'scale',streak:5,pb:9,status:'done',rating:4,freezes:1},
+    {name:'Daily mantras',icon:'✨',cat:'FOCUS',type:'binary',streak:0,pb:6,status:'missed',rating:0,freezes:0},
+    {name:'Eating',icon:'🥗',cat:'BODY',type:'scale',streak:9,pb:15,status:'done',rating:3,freezes:0},
+    {name:'Sleep',icon:'😴',cat:'SLEEP',type:'scale',streak:6,pb:11,status:'pending',rating:0,freezes:0},
+  ];
+
+  const projects=[
+    {name:'Launch this dashboard',pct:35,due:'Jun 2026',tags:['Product','Design'],tasks:['Define architecture','Build in Lovable','Test with real data','Share with friends'],done:[true,false,false,false]},
+    {name:'Read 12 books this year',pct:58,due:'Dec 2026',tags:['Learning'],tasks:['Finish current book','Write summary notes','Pick next book'],done:[true,true,false]},
+    {name:'Morning routine overhaul',pct:80,due:'Jun 2026',tags:['Health'],tasks:['Lock in wake time','Add cold shower','Review after 30 days'],done:[true,true,false]},
+  ];
+
+  function todayScore(){return Math.round(habits.filter(h=>h.status==='done').length/habits.length*100)}
+  function weekScore(){return Math.round(todayScore()*0.9+5)}
+  function monthScore(){return Math.round(todayScore()*0.85+8)}
+  function quarterScore(){return Math.round(todayScore()*0.78+6)}
+
+  function renderScores(){
+    const s=[
+      {label:'Today',val:todayScore(),sub:habits.filter(h=>h.status==='done').length+'/'+habits.length+' habits'},
+      {label:'This week',val:weekScore(),sub:'Avg daily · 7d'},
+      {label:'This month',val:monthScore(),sub:'Avg daily · 30d'},
+      {label:'This quarter',val:quarterScore(),sub:'Avg daily · 90d'},
+    ];
+    document.getElementById('scores').innerHTML=s.map(s=>`<div class="sc"><div class="sc-label">${s.label}</div><div class="sc-val">${s.val}<span style="font-size:13px;color:var(--t3)">%</span></div><div class="sc-sub">${s.sub}</div><div class="sc-bar"><div class="sc-fill" style="width:${s.val}%"></div></div></div>`).join('');
+  }
+
+  function renderAlert(){
+    const missed=habits.filter(h=>h.status==='missed');
+    const el=document.getElementById('alert-bar');
+    if(!missed.length){el.style.display='none';return;}
+    el.style.display='flex';
+    document.getElementById('alert-text').textContent=missed.length+' habit'+(missed.length>1?'s':'')+' incomplete today — '+missed.map(h=>h.name).join(' · ');
+  }
+
+  function renderOvHabits(){
+    document.getElementById('ov-habits').innerHTML=habits.slice(0,4).map((h,i)=>`
+      <div class="hr" onclick="toggleH(${i})">
+        <div class="hicon">${h.icon}</div>
+        <div class="hinfo">
+          <div class="hname">${h.name}</div>
+          <div class="hbar-wrap"><div class="hbar" style="width:${Math.round(h.streak/Math.max(h.pb,1)*100)}%"></div></div>
+          <div class="hmeta">${h.streak>0?'🔥 '+h.streak+' day streak':'No streak'} · PB ${h.pb}</div>
+        </div>
+        <div class="hcheck ${h.status}">${h.status==='done'?'✓':h.status==='missed'?'!':''}</div>
+      </div>`).join('');
+  }
+
+  function renderOvProjects(){
+    document.getElementById('ov-projects').innerHTML=projects.slice(0,3).map(p=>`
+      <div class="pr">
+        <div class="prhead"><div class="prname">${p.name}</div><div class="prpct">${p.pct}%</div></div>
+        <div class="prbar-wrap"><div class="prbar" style="width:${p.pct}%"></div></div>
+        <div class="prtags">${p.tags.map(t=>`<div class="tag">${t}</div>`).join('')}<div class="tag">${p.due}</div></div>
+      </div>`).join('');
+  }
+
+  function renderMissed(){
+    const missed=habits.filter(h=>h.status==='missed');
+    const sec=document.getElementById('missed-section');
+    if(!missed.length){sec.style.display='none';return;}
+    sec.style.display='block';
+    document.getElementById('missed-list').innerHTML=missed.map(h=>{
+      const i=habits.indexOf(h);
+      return `<div class="hr" onclick="toggleH(${i})" style="border-color:rgba(231,76,60,0.3);margin-bottom:6px"><div class="hicon">${h.icon}</div><div class="hinfo"><div class="hname" style="color:#F08080">${h.name}</div><div class="hmeta" style="color:#A06060">Tap to mark complete</div></div><div class="hcheck missed">!</div></div>`;
+    }).join('');
+  }
+
+  function renderFullHabits(){
+    document.getElementById('full-habits').innerHTML=habits.map((h,i)=>{
+      const pct=Math.round(h.streak/Math.max(h.pb,1)*100);
+      const stars=h.type==='scale'?`<div class="stars">${[1,2,3,4,5].map(s=>`<div class="star ${h.rating>=s?'on':''}" onclick="setRating(${i},${s});event.stopPropagation()"></div>`).join('')}</div>`:'';
+      return `<div class="fhr"><div class="fhr-top"><div style="font-size:18px">${h.icon}</div><div class="fhr-name">${h.name}</div>${stars}<div class="fhr-streak">${h.streak>0?'🔥'+h.streak:''}</div><div class="fcheck ${h.status}" onclick="toggleH(${i})">${h.status==='done'?'✓':h.status==='missed'?'!':''}</div><button class="row-plus" onclick="alert('Add note — coming in next build!')" title="Add note">+</button></div><div class="fhr-bar-row"><div class="fhr-bar-wrap"><div class="fhr-bar" style="width:${pct}%"></div></div><div class="fhr-pb">PB ${h.pb}d</div></div><div class="fhr-meta"><div class="fhr-cat">${h.cat}</div>${h.freezes>0?`<div class="freeze" onclick="useFreeze(${i});event.stopPropagation()">❄ ${h.freezes} freeze${h.freezes>1?'s':''}</div>`:''}<div class="pb-badge">${pct}% of PB</div></div></div>`;
+    }).join('');
+  }
+
+  function renderHeatmap(){
+    const weeks=12,days=7,today=new Date();
+    const dayLabels=['M','T','W','T','F','S','S'];
+    const dayCol=dayLabels.map(l=>`<div style="height:12px;display:flex;align-items:center;font-size:9px;color:var(--t3);width:12px;justify-content:center">${l}</div>`).join('');
+    let cols='';
+    for(let w=weeks-1;w>=0;w--){
+      let cells='';
+      for(let d=0;d<days;d++){
+        const date=new Date(today);
+        date.setDate(today.getDate()-((w*7)+(days-1-d)));
+        const isFuture=date>today;
+        const score=isFuture?0:Math.random();
+        cells+=`<div class="hm-cell" style="background:${isFuture?'#131313':hmColor(score)}" title="${isFuture?'Future':date.toDateString()+': '+Math.round(score*100)+'%'}"></div>`;
+      }
+      cols+=`<div style="display:flex;flex-direction:column;gap:3px">${cells}</div>`;
+    }
+    document.getElementById('heatmap').innerHTML=`
+      <div style="display:flex;gap:3px">
+        <div style="display:flex;flex-direction:column;gap:3px;margin-right:4px">${dayCol}</div>
+        <div style="display:flex;gap:3px">${cols}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:12px">
+        <span style="font-size:10px;color:var(--t3)">Nothing</span>
+        <div style="width:10px;height:10px;border-radius:2px;background:#181818"></div>
+        <div style="width:10px;height:10px;border-radius:2px;background:${O}"></div>
+        <span style="font-size:10px;color:var(--t2)">Partial</span>
+        <div style="width:10px;height:10px;border-radius:2px;background:${YELLOW}"></div>
+        <span style="font-size:10px;color:var(--t2)">50/50</span>
+        <div style="width:10px;height:10px;border-radius:2px;background:${GREEN}"></div>
+        <span style="font-size:10px;color:var(--t2)">Perfect</span>
+      </div>`;
+  }
+
+  function renderProjects(){
+    document.getElementById('full-projects').innerHTML=projects.map((p,pi)=>`
+      <div class="pcard">
+        <div class="pcard-head">
+          <div>
+            <div class="pcard-name">${p.name}</div>
+            <div class="pcard-tags">${p.tags.map(t=>`<div class="tag">${t}</div>`).join('')}<div class="tag">${p.due}</div></div>
+          </div>
+          <div class="pcard-pct" id="ppct-${pi}">${p.pct}%</div>
+        </div>
+        <div class="pcard-bar-wrap"><div class="pcard-bar" id="pbar-${pi}" style="width:${p.pct}%"></div></div>
+        <div class="tasks">
+          ${p.tasks.map((t,ti)=>`
+            <div class="task ${p.done[ti]?'done-task':''}" onclick="toggleTask(${pi},${ti})">
+              <div class="tcheck ${p.done[ti]?'done':''}">${p.done[ti]?'✓':''}</div>
+              <span>${t}</span>
+            </div>`).join('')}
+          <div style="margin-top:10px">
+            <button class="add-btn" onclick="alert('Add task — coming in next build!')">+ Add task</button>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  function toggleH(i){
+    const c={pending:'done',done:'missed',missed:'pending'};
+    habits[i].status=c[habits[i].status];
+    if(habits[i].status==='done'&&habits[i].streak===0)habits[i].streak=1;
+    renderAll();
+  }
+  function setRating(i,r){
+    habits[i].rating=r;
+    if(habits[i].status==='pending')habits[i].status='done';
+    renderAll();
+  }
+  function useFreeze(i){
+    if(habits[i].freezes>0&&habits[i].status==='missed'){
+      habits[i].freezes--;habits[i].status='pending';renderAll();
+    }
+  }
+  function toggleTask(pi,ti){
+    projects[pi].done[ti]=!projects[pi].done[ti];
+    const done=projects[pi].done.filter(Boolean).length;
+    projects[pi].pct=Math.round(done/projects[pi].tasks.length*100);
+    renderProjects();
+  }
+  function addHabit(){alert('Add habit form — coming in next build!')}
+  function addProject(){alert('Add project form — coming in next build!')}
+
+  function nav(id){
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+    document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+    document.getElementById('v-'+id).classList.add('on');
+    ['overview','habits','projects'].forEach((v,idx)=>{
+      if(v===id)document.querySelectorAll('.nb')[idx].classList.add('on');
+    });
+  }
+
+  function tick(){
+    const n=new Date();
+    document.getElementById('clk').textContent=
+      ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][n.getDay()]+' '+
+      n.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})+' · '+
+      n.toTimeString().slice(0,8);
+  }
+
+  function renderAll(){
+    renderScores();renderAlert();renderOvHabits();renderOvProjects();
+    renderMissed();renderFullHabits();renderProjects();
+  }
+
+  renderAll();renderHeatmap();tick();setInterval(tick,1000);
+</script>
+</body>
+</html>
