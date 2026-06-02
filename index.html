@@ -483,9 +483,9 @@ async function loadFromDB(){
   try{
     const uid=currentUser.id;
     const [{data:h},{data:p},{data:t}]=await Promise.all([
-      db.from('habits').select('*').eq('user_id',uid),
-      db.from('projects').select('*').eq('user_id',uid),
-      db.from('todos').select('*').eq('user_id',uid).order('rank'),
+      withTimeout(db.from('habits').select('*').eq('user_id',uid),60000),
+      withTimeout(db.from('projects').select('*').eq('user_id',uid),60000),
+      withTimeout(db.from('todos').select('*').eq('user_id',uid).order('rank'),60000),
     ]);
     habits.splice(0,habits.length,...(h||[]));
     projects.splice(0,projects.length,...(p||[]));
