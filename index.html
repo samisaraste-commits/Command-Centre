@@ -26,13 +26,11 @@
     .nb.on{background:linear-gradient(135deg,rgba(232,130,12,0.2),rgba(232,130,12,0.1));color:var(--o);border:1px solid rgba(232,130,12,0.25)}
     .nb:hover:not(.on){color:var(--t2);background:rgba(232,130,12,0.05)}
     .clock{font-size:12px;color:var(--o);font-variant-numeric:tabular-nums;letter-spacing:.5px;text-shadow:0 0 10px rgba(232,130,12,0.3)}
-    .loading-bar{height:2px;background:linear-gradient(90deg,var(--o),var(--yellow),var(--o));background-size:200% 100%;animation:loadslide 1.2s linear infinite;display:none}
-    @keyframes loadslide{0%{background-position:200% 0}100%{background-position:-200% 0}}
-    /* save indicator */
-    .save-indicator{position:fixed;bottom:20px;right:20px;font-size:11px;padding:6px 12px;border-radius:20px;z-index:50;opacity:0;transition:opacity .3s;pointer-events:none}
-    .save-indicator.saving{opacity:1;background:rgba(232,130,12,0.15);border:1px solid rgba(232,130,12,0.3);color:var(--o)}
-    .save-indicator.saved{opacity:1;background:rgba(46,204,113,0.12);border:1px solid rgba(46,204,113,0.3);color:var(--green)}
-    .save-indicator.error{opacity:1;background:rgba(231,76,60,0.12);border:1px solid rgba(231,76,60,0.3);color:#F08080}
+    .loading-bar{height:2px;background:var(--o);display:none}
+    .save-indicator{position:fixed;bottom:20px;right:20px;font-size:11px;padding:6px 14px;border-radius:20px;z-index:50;opacity:0;transition:opacity .3s;pointer-events:none}
+    .save-indicator.saving{opacity:1;background:rgba(232,130,12,0.12);border:1px solid rgba(232,130,12,0.3);color:var(--o)}
+    .save-indicator.saved{opacity:1;background:rgba(46,204,113,0.1);border:1px solid rgba(46,204,113,0.3);color:var(--green)}
+    .save-indicator.error{opacity:1;background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);color:#F08080}
     .body{padding:20px}
     .view{display:none}.view.on{display:block}
     .scores{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
@@ -198,7 +196,6 @@
     .modal-cancel:hover{color:var(--t1)}
     .modal-ok{padding:7px 18px;font-size:12px;border-radius:5px;border:1px solid rgba(46,204,113,0.3);background:var(--green2);color:var(--green);cursor:pointer}
     .modal-ok.red{border-color:rgba(231,76,60,0.3);background:var(--red2);color:var(--red)}
-    /* login */
     .login-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:200;overflow:hidden;background:#05050A}
     .login-bg{position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 40%,rgba(232,130,12,0.12) 0%,rgba(232,130,12,0.04) 40%,transparent 70%);animation:pulseGlow 4s ease-in-out infinite}
     .login-bg2{position:absolute;inset:0;background:radial-gradient(ellipse 40% 40% at 50% 50%,rgba(232,130,12,0.06) 0%,transparent 60%);animation:pulseGlow 4s ease-in-out infinite reverse}
@@ -232,11 +229,7 @@
   </style>
 </head>
 <body>
-
-<!-- SAVE INDICATOR -->
 <div class="save-indicator" id="save-indicator"></div>
-
-<!-- LOGIN OVERLAY -->
 <div class="login-overlay" id="login-overlay">
   <div class="login-bg"></div>
   <div class="login-bg2"></div>
@@ -270,7 +263,6 @@
     </div>
   </div>
 </div>
-
 <div class="shell">
   <div class="topbar">
     <div class="brand">COMMAND <span>CENTRE</span></div>
@@ -376,7 +368,6 @@
     </div>
   </div>
 </div>
-
 <div class="modal-overlay" id="modal" style="display:none">
   <div class="modal">
     <div class="modal-title" id="m-title"></div>
@@ -387,29 +378,15 @@
     </div>
   </div>
 </div>
-
 <script>
 const O='#E8820C',GREEN='#2ECC71',YELLOW='#C8E830';
 function hmColor(s){if(s===0)return '#131108';if(s<0.25)return '#2A1A04';if(s<0.5)return O;if(s<0.75)return YELLOW;return GREEN;}
-
 const SUPA_URL='https://wdtcygterxwqqashtqkr.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkdGN5Z3Rlcnh3cXFhc2h0cWtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NjAxMzEsImV4cCI6MjA5NTUzNjEzMX0.Cd4x04x4UcLd3WXyPldVHEKoXkPbPYSUk40s-NzQ3rg';
 const {createClient}=supabase;
 const db=createClient(SUPA_URL,SUPA_KEY);
 let currentUser=null;
 const habits=[],projects=[],todos=[];
-
-// ── Save indicator ────────────────────────────────────────────────────────────
-let saveTimer=null;
-function showSave(state,msg){
-  const el=document.getElementById('save-indicator');
-  el.className='save-indicator '+state;
-  el.textContent=msg;
-  clearTimeout(saveTimer);
-  if(state!=='saving')saveTimer=setTimeout(()=>{el.className='save-indicator';},2500);
-}
-
-// ── Archive demo data ─────────────────────────────────────────────────────────
 function buildArchive(){
   const days=[],today=new Date();
   const samples=[
@@ -431,8 +408,6 @@ function buildArchive(){
 }
 const archiveDays=buildArchive();
 let openArchiveDay=null,activeFilter='all',projTabView='active',dragSrcIdx=null,todoArchiveOpen=false;
-
-// ── Auth ──────────────────────────────────────────────────────────────────────
 db.auth.onAuthStateChange(async(event,session)=>{
   if(event==='SIGNED_IN'){currentUser=session.user;document.getElementById('login-overlay').style.display='none';document.getElementById('logout-btn').style.display='flex';await loadFromDB();}
   if(event==='SIGNED_OUT'){currentUser=null;document.getElementById('login-overlay').style.display='flex';document.getElementById('logout-btn').style.display='none';habits.splice(0);projects.splice(0);todos.splice(0);renderAll();}
@@ -471,75 +446,77 @@ async function sendReset(){
   if(error){err.textContent=error.message;err.style.color='#F08080';}
   else{err.textContent='Reset link sent — check your email ✓';err.style.color='var(--green)';}
 }
-
-// ── Loading ───────────────────────────────────────────────────────────────────
 function setLoading(on){document.getElementById('loading-bar').style.display=on?'block':'none';}
-
-// ── Load from DB ──────────────────────────────────────────────────────────────
+let saveTimer=null;
+function showSave(state,msg){
+  const el=document.getElementById('save-indicator');
+  if(!el)return;
+  el.className='save-indicator '+state;
+  el.textContent=msg;
+  clearTimeout(saveTimer);
+  if(state==='saving')saveTimer=setTimeout(()=>{el.className='save-indicator error';el.textContent='⚠ Save failed — check connection';},10000);
+  else saveTimer=setTimeout(()=>{el.className='save-indicator';},3000);
+}
+function withTimeout(promise,ms=8000){
+  return Promise.race([promise,new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]);
+}
 async function loadFromDB(){
   if(!currentUser)return;
   setLoading(true);
-  const uid=currentUser.id;
-  const [{data:h,error:he},{data:p,error:pe},{data:t,error:te}]=await Promise.all([
-    db.from('habits').select('*').eq('user_id',uid),
-    db.from('projects').select('*').eq('user_id',uid),
-    db.from('todos').select('*').eq('user_id',uid).order('rank'),
-  ]);
-  if(he)console.error('habits load error',he);
-  if(pe)console.error('projects load error',pe);
-  if(te)console.error('todos load error',te);
-  habits.splice(0,habits.length,...(h||[]));
-  projects.splice(0,projects.length,...(p||[]));
-  todos.splice(0,todos.length,...(t||[]));
+  try{
+    const uid=currentUser.id;
+    const [{data:h},{data:p},{data:t}]=await Promise.all([
+      db.from('habits').select('*').eq('user_id',uid),
+      db.from('projects').select('*').eq('user_id',uid),
+      db.from('todos').select('*').eq('user_id',uid).order('rank'),
+    ]);
+    habits.splice(0,habits.length,...(h||[]));
+    projects.splice(0,projects.length,...(p||[]));
+    todos.splice(0,todos.length,...(t||[]));
+  }catch(e){console.error('Load error',e);showSave('error','⚠ Could not load data — check connection');}
   setLoading(false);
   renderAll();renderHeatmap();
 }
-
-// ── DB save helpers (with visible feedback) ───────────────────────────────────
 async function dbSaveHabit(h){
   if(!currentUser)return;
   showSave('saving','Saving...');
   try{
     const row={name:h.name,icon:h.icon,cat:h.cat,type:h.type,streak:h.streak,pb:h.pb,status:h.status,rating:h.rating,freezes:h.freezes,user_id:currentUser.id};
-    if(h.id){const{error}=await db.from('habits').update(row).eq('id',h.id);if(error)throw error;}
-    else{const{data,error}=await db.from('habits').insert(row).select().single();if(error)throw error;if(data)h.id=data.id;}
+    if(h.id){const{error}=await withTimeout(db.from('habits').update(row).eq('id',h.id));if(error)throw error;}
+    else{const{data,error}=await withTimeout(db.from('habits').insert(row).select().single());if(error)throw error;if(data)h.id=data.id;}
     showSave('saved','✓ Saved');
-  }catch(e){console.error(e);showSave('error','⚠ Save failed — check connection');}
+  }catch(e){console.error('Save habit error',e);showSave('error','⚠ Save failed — check connection');}
 }
 async function dbSaveProject(p){
   if(!currentUser)return;
   showSave('saving','Saving...');
   try{
     const row={name:p.name,pct:p.pct,due:p.due,tags:p.tags,tasks:p.tasks,done:p.done,archived:p.archived,archived_date:p.archived_date||null,user_id:currentUser.id};
-    if(p.id){const{error}=await db.from('projects').update(row).eq('id',p.id);if(error)throw error;}
-    else{const{data,error}=await db.from('projects').insert(row).select().single();if(error)throw error;if(data)p.id=data.id;}
+    if(p.id){const{error}=await withTimeout(db.from('projects').update(row).eq('id',p.id));if(error)throw error;}
+    else{const{data,error}=await withTimeout(db.from('projects').insert(row).select().single());if(error)throw error;if(data)p.id=data.id;}
     showSave('saved','✓ Saved');
-  }catch(e){console.error(e);showSave('error','⚠ Save failed — check connection');}
+  }catch(e){console.error('Save project error',e);showSave('error','⚠ Save failed — check connection');}
 }
 async function dbSaveTodo(t){
   if(!currentUser)return;
   showSave('saving','Saving...');
   try{
     const row={text:t.text,pri:t.pri,done:t.done,rank:t.rank,carried:t.carried,user_id:currentUser.id};
-    if(t.id){const{error}=await db.from('todos').update(row).eq('id',t.id);if(error)throw error;}
-    else{const{data,error}=await db.from('todos').insert(row).select().single();if(error)throw error;if(data)t.id=data.id;}
+    if(t.id){const{error}=await withTimeout(db.from('todos').update(row).eq('id',t.id));if(error)throw error;}
+    else{const{data,error}=await withTimeout(db.from('todos').insert(row).select().single());if(error)throw error;if(data)t.id=data.id;}
     showSave('saved','✓ Saved');
-  }catch(e){console.error(e);showSave('error','⚠ Save failed — check connection');}
+  }catch(e){console.error('Save todo error',e);showSave('error','⚠ Save failed — check connection');}
 }
 async function dbDel(table,id){
   if(!currentUser||!id)return;
-  showSave('saving','Saving...');
-  try{const{error}=await db.from(table).delete().eq('id',id);if(error)throw error;showSave('saved','✓ Deleted');}
-  catch(e){console.error(e);showSave('error','⚠ Delete failed');}
+  showSave('saving','Deleting...');
+  try{const{error}=await withTimeout(db.from(table).delete().eq('id',id));if(error)throw error;showSave('saved','✓ Deleted');}
+  catch(e){console.error('Delete error',e);showSave('error','⚠ Delete failed');}
 }
-
-// ── Scores ────────────────────────────────────────────────────────────────────
 function todayScore(){return habits.length?Math.round(habits.filter(h=>h.status==='done').length/habits.length*100):0}
 function weekScore(){return Math.round(todayScore()*0.9+5)}
 function monthScore(){return Math.round(todayScore()*0.85+8)}
 function quarterScore(){return Math.round(todayScore()*0.78+6)}
-
-// ── Render ────────────────────────────────────────────────────────────────────
 function renderScores(){
   const s=[{label:'Today',val:todayScore(),sub:habits.filter(h=>h.status==='done').length+'/'+habits.length+' habits'},{label:'This week',val:weekScore(),sub:'Avg daily · 7d'},{label:'This month',val:monthScore(),sub:'Avg daily · 30d'},{label:'This quarter',val:quarterScore(),sub:'Avg daily · 90d'}];
   document.getElementById('scores').innerHTML=s.map(s=>`<div class="sc"><div class="sc-label">${s.label}</div><div class="sc-val">${s.val}<span style="font-size:13px;color:var(--t3)">%</span></div><div class="sc-sub">${s.sub}</div><div class="sc-bar"><div class="sc-fill" style="width:${s.val}%"></div></div></div>`).join('');
@@ -604,13 +581,9 @@ function renderTodoArchive(){
   document.getElementById('todo-archive-days').innerHTML=archiveDays.map((day,di)=>{const pct=Math.round(day.doneCount/day.total*100);let dotColor=pct===100?GREEN:pct>=50?YELLOW:O;const isOpen=openArchiveDay===di;return`<div><div class="day-row ${isOpen?'open':''}" onclick="toggleArchiveDay(${di})"><div class="day-date">${day.label}</div><div class="day-score" style="color:${dotColor}">${day.doneCount}/${day.total} done</div><div class="day-dot" style="background:${dotColor}"></div><div class="chevron ${isOpen?'open':''}">▶</div></div>${isOpen?`<div class="day-tasks">${day.tasks.map(t=>`<div class="day-task-row"><div class="day-task-cb ${t.done?'done':'undone'}">${t.done?'✓':'✕'}</div><span style="color:${t.done?'var(--t2)':'var(--t1)'};${t.done?'text-decoration:line-through':''}">${t.text}</span></div>`).join('')}</div>`:''}</div>`;}).join('');
 }
 function renderAll(){renderScores();renderAlert();renderOvHabits();renderOvProjects();renderOvTodo();renderMissed();renderFullHabits();renderProjects();renderCarried();renderFullTodo();}
-
-// ── Modal ─────────────────────────────────────────────────────────────────────
 function showModal(title,body,okLabel,isRed,onOk){document.getElementById('m-title').textContent=title;document.getElementById('m-body').textContent=body;const btn=document.getElementById('m-ok');btn.textContent=okLabel;btn.className='modal-ok'+(isRed?' red':'');btn.onclick=()=>{closeModal();onOk();};document.getElementById('modal').style.display='flex';}
 function closeModal(){document.getElementById('modal').style.display='none';}
 function priLabel(p){if(p==='high')return '<span class="td-pri pri-high">High</span>';if(p==='med')return '<span class="td-pri pri-med">Med</span>';return '<span class="td-pri pri-low">Low</span>';}
-
-// ── Actions ───────────────────────────────────────────────────────────────────
 async function toggleH(i){const c={pending:'done',done:'missed',missed:'pending'};habits[i].status=c[habits[i].status];if(habits[i].status==='done'&&habits[i].streak===0)habits[i].streak=1;renderAll();await dbSaveHabit(habits[i]);}
 async function setRating(i,r){habits[i].rating=r;if(habits[i].status==='pending')habits[i].status='done';renderAll();await dbSaveHabit(habits[i]);}
 async function useFreeze(i){if(habits[i].freezes>0&&habits[i].status==='missed'){habits[i].freezes--;habits[i].status='pending';renderAll();await dbSaveHabit(habits[i]);}}
@@ -621,8 +594,6 @@ async function completeProject(i){projects[i].archived=true;projects[i].pct=100;
 function deleteHabit(i){showModal('Delete habit?','"'+habits[i].name+'" will be permanently removed.','Delete',true,async()=>{const id=habits[i].id;habits.splice(i,1);renderAll();await dbDel('habits',id);});}
 function deleteProject(i){showModal('Delete project?','"'+projects[i].name+'" will be permanently removed.','Delete',true,async()=>{const id=projects[i].id;projects.splice(i,1);renderProjects();renderOvProjects();await dbDel('projects',id);});}
 function deleteTodo(i){showModal('Delete to-do?','"'+todos[i].text+'" will be permanently removed.','Delete',true,async()=>{const id=todos[i].id;todos.splice(i,1);renderOvTodo();renderCarried();renderFullTodo();await dbDel('todos',id);});}
-
-// ── Forms ─────────────────────────────────────────────────────────────────────
 function toggleHabitForm(){const f=document.getElementById('habit-form');f.style.display=f.style.display==='none'?'block':'none';if(f.style.display==='block')document.getElementById('habit-name').focus();}
 async function submitHabit(){const name=document.getElementById('habit-name').value.trim();const icon=document.getElementById('habit-icon').value.trim()||'⭐';const cat=document.getElementById('habit-cat').value;const type=document.getElementById('habit-type').value;if(!name)return;const h={name,icon,cat,type,streak:0,pb:0,status:'pending',rating:0,freezes:0};habits.push(h);renderAll();document.getElementById('habit-name').value='';document.getElementById('habit-icon').value='';document.getElementById('habit-form').style.display='none';await dbSaveHabit(h);}
 function toggleProjForm(){const f=document.getElementById('proj-form');const isOpen=f.style.display!=='none'&&f.style.display!=='';f.style.display=isOpen?'none':'block';document.getElementById('new-proj-btn').style.display=isOpen?'':'none';if(!isOpen)document.getElementById('proj-name').focus();}
@@ -631,8 +602,6 @@ function toggleAddTask(pi){const row=document.getElementById('add-task-row-'+pi)
 async function submitTask(pi){const input=document.getElementById('task-input-'+pi);const text=input.value.trim();if(!text)return;projects[pi].tasks.push(text);projects[pi].done.push(false);projects[pi].pct=Math.round(projects[pi].done.filter(Boolean).length/projects[pi].tasks.length*100);input.value='';renderProjects();renderOvProjects();await dbSaveProject(projects[pi]);}
 function toggleForm(){const f=document.getElementById('todo-form');f.style.display=f.style.display==='none'?'block':'none';if(f.style.display==='block')document.getElementById('todo-input').focus();}
 async function submitTodo(){const input=document.getElementById('todo-input');const pri=document.getElementById('todo-pri').value;const text=input.value.trim();if(!text)return;const t={text,pri,done:false,rank:todos.length,carried:false};todos.unshift(t);todos.forEach((td,i)=>td.rank=i);input.value='';document.getElementById('todo-form').style.display='none';renderOvTodo();renderFullTodo();await dbSaveTodo(t);}
-
-// ── Filters, drag, nav ────────────────────────────────────────────────────────
 function setFilter(f,btn){activeFilter=f;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderFullTodo();}
 function dragStart(e,i){dragSrcIdx=i;setTimeout(()=>{const el=document.querySelector(`[data-idx="${i}"]`);if(el)el.classList.add('dragging');},0);}
 function dragOver(e){e.preventDefault();e.currentTarget.classList.add('drag-over');}
@@ -644,8 +613,6 @@ function setProjTab(view,btn){projTabView=view;document.querySelectorAll('.ptb')
 function nav(id){document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));document.getElementById('v-'+id).classList.add('on');['overview','habits','projects','todo'].forEach((v,idx)=>{if(v===id)document.querySelectorAll('.nb')[idx].classList.add('on');});}
 function tick(){const n=new Date();document.getElementById('clk').textContent=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][n.getDay()]+' '+n.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})+' · '+n.toTimeString().slice(0,8);}
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement.id==='todo-input')submitTodo();if(e.key==='Escape')closeModal();});
-
-// ── Boot ──────────────────────────────────────────────────────────────────────
 renderAll();renderHeatmap();tick();setInterval(tick,1000);
 initAuth();
 </script>
