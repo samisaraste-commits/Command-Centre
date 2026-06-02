@@ -261,6 +261,14 @@
       <button class="login-btn-primary" onclick="sendReset()">Send Reset Link</button>
       <button class="login-forgot" onclick="showLogin()">← Back to sign in</button>
     </div>
+    <div class="reset-panel" id="new-pass-panel">
+      <div style="font-size:13px;color:var(--t1);text-align:center;font-weight:500">Set your new password</div>
+      <div style="font-size:11px;color:var(--t3);text-align:center;line-height:1.6">Choose a new password for your account.</div>
+      <div class="login-err" id="new-pass-err"></div>
+      <div class="login-label">New Password</div>
+      <input class="login-input" id="new-pass" type="password" placeholder="•••••••• (min 6 chars)" onkeydown="if(event.key==='Enter')updatePassword()" />
+      <button class="login-btn-primary" onclick="updatePassword()">Save New Password</button>
+    </div>
   </div>
 </div>
 <div class="shell">
@@ -411,6 +419,7 @@ let openArchiveDay=null,activeFilter='all',projTabView='active',dragSrcIdx=null,
 db.auth.onAuthStateChange(async(event,session)=>{
   if(event==='SIGNED_IN'){currentUser=session.user;document.getElementById('login-overlay').style.display='none';document.getElementById('logout-btn').style.display='flex';await loadFromDB();}
   if(event==='SIGNED_OUT'){currentUser=null;document.getElementById('login-overlay').style.display='flex';document.getElementById('logout-btn').style.display='none';habits.splice(0);projects.splice(0);todos.splice(0);renderAll();}
+  if(event==='PASSWORD_RECOVERY'){document.getElementById('login-overlay').style.display='flex';document.getElementById('login-main').classList.add('hidden');document.getElementById('reset-panel').classList.remove('on');document.getElementById('new-pass-panel').classList.add('on');}
 });
 async function initAuth(){
   const {data:{session}}=await db.auth.getSession();
@@ -445,6 +454,14 @@ async function sendReset(){
   const {error}=await db.auth.resetPasswordForEmail(email,{redirectTo:'https://command-centre-liard.vercel.app'});
   if(error){err.textContent=error.message;err.style.color='#F08080';}
   else{err.textContent='Reset link sent — check your email ✓';err.style.color='var(--green)';}
+}
+async function updatePassword(){
+  const pass=document.getElementById('new-pass').value;
+  const err=document.getElementById('new-pass-err');
+  if(pass.length<6){err.textContent='Password must be at least 6 characters';err.style.color='#F08080';return;}
+  const {error}=await db.auth.updateUser({password:pass});
+  if(error){err.textContent=error.message;err.style.color='#F08080';}
+  else{err.textContent='Password updated! Signing you in...';err.style.color='var(--green)';setTimeout(()=>{document.getElementById('new-pass-panel').classList.remove('on');document.getElementById('login-main').classList.remove('hidden');document.getElementById('login-overlay').style.display='none';},1500);}
 }
 function setLoading(on){document.getElementById('loading-bar').style.display=on?'block':'none';}
 let saveTimer=null;
