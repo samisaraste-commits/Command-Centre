@@ -418,8 +418,8 @@ function buildArchive(){
 const archiveDays=buildArchive();
 let openArchiveDay=null,activeFilter='all',projTabView='active',dragSrcIdx=null,todoArchiveOpen=false;
 let editingHabit=null,editingProject=null,editingTodo=null;
-db.auth.onAuthStateChange(async(event,session)=>{
-  if(event==='SIGNED_IN'){currentUser=session.user;document.getElementById('login-overlay').style.display='none';document.getElementById('logout-btn').style.display='flex';await loadFromDB();}
+db.auth.onAuthStateChange((event,session)=>{
+  if(event==='SIGNED_IN'){currentUser=session.user;document.getElementById('login-overlay').style.display='none';document.getElementById('logout-btn').style.display='flex';setTimeout(()=>{loadFromDB();},0);}
   if(event==='SIGNED_OUT'){currentUser=null;document.getElementById('login-overlay').style.display='flex';document.getElementById('logout-btn').style.display='none';habits.splice(0);projects.splice(0);todos.splice(0);renderAll();}
   if(event==='PASSWORD_RECOVERY'){document.getElementById('login-overlay').style.display='flex';document.getElementById('login-main').classList.add('hidden');document.getElementById('reset-panel').classList.remove('on');document.getElementById('new-pass-panel').classList.add('on');}
 });
