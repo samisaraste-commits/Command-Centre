@@ -294,7 +294,7 @@
       <div class="three">
         <div class="panel"><div class="ph"><div class="pt">Today's habits</div><button class="plink" onclick="nav('habits')">View all →</button></div><div id="ov-habits"></div></div>
         <div class="panel"><div class="ph"><div class="pt">Active projects</div><button class="plink" onclick="nav('projects')">View all →</button></div><div id="ov-projects"></div></div>
-        <div class="panel"><div class="ph"><div class="pt">To-Do</div><button class="plink" onclick="nav('todo')">View all →</button></div><div id="ov-todo"></div></div><div class="panel" style="grid-column:1/-1"><div class="ph"><div class="pt">Mantras</div><button class="plink" id="mantra-edit-btn" onclick="toggleMantraEdit()">Edit ✏</button></div><div id="ov-mantras"></div><div id="mantra-edit" style="display:none;margin-top:6px"><textarea id="mantra-text" class="add-input" style="width:100%;min-height:90px;resize:vertical;font-family:inherit;line-height:1.7" placeholder="One mantra per line"></textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="add-submit" onclick="saveMantras()">Save</button><button class="add-btn" onclick="toggleMantraEdit()">Cancel</button></div></div></div>
+        <div class="panel"><div class="ph"><div class="pt">To-Do</div><button class="plink" onclick="nav('todo')">View all →</button></div><div id="ov-todo"></div></div><div class="panel"><div class="ph"><div class="pt">Mantras</div><button class="plink" id="mantra-edit-btn" onclick="toggleMantraEdit()">Edit ✏</button></div><div id="ov-mantras"></div><div id="mantra-edit" style="display:none;margin-top:6px"><textarea id="mantra-text" class="add-input" style="width:100%;min-height:90px;resize:vertical;font-family:inherit;line-height:1.7" placeholder="One mantra per line"></textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="add-submit" onclick="saveMantras()">Save</button><button class="add-btn" onclick="toggleMantraEdit()">Cancel</button></div></div></div>
       </div>
     </div>
     <div id="v-habits" class="view">
@@ -487,7 +487,7 @@ function loadCache(){
     if(!c)return false;
     habits.splice(0,habits.length,...c.habits);
     projects.splice(0,projects.length,...c.projects);
-    todos.splice(0,todos.length,...c.todos);
+    todos.splice(0,todos.length,...c.todos);mantraText=c.mantras||'';
     return true;
   }catch(e){return false;}
 }
@@ -522,10 +522,11 @@ async function loadFromDB(){
   setLoading(true);
   const uid=currentUser.id;
   try{
-    const [{data:h},{data:p},{data:t}]=await Promise.all([
+    const [{data:h},{data:p},{data:t},{data:m}]=await Promise.all([
       db.from('habits').select('*').eq('user_id',uid),
       db.from('projects').select('*').eq('user_id',uid),
       db.from('todos').select('*').eq('user_id',uid).order('rank'),
+      db.from('mantras').select('content').eq('user_id',uid).maybeSingle(),
     ]);
     habits.splice(0,habits.length,...(h||[]));
     projects.splice(0,projects.length,...(p||[]));
@@ -672,7 +673,12 @@ function renderFullTodo(){
 function renderTodoArchive(){
   document.getElementById('todo-archive-days').innerHTML=archiveDays.map((day,di)=>{const pct=Math.round(day.doneCount/day.total*100);let dotColor=pct===100?GREEN:pct>=50?YELLOW:O;const isOpen=openArchiveDay===di;return`<div><div class="day-row ${isOpen?'open':''}" onclick="toggleArchiveDay(${di})"><div class="day-date">${day.label}</div><div class="day-score" style="color:${dotColor}">${day.doneCount}/${day.total} done</div><div class="day-dot" style="background:${dotColor}"></div><div class="chevron ${isOpen?'open':''}">▶</div></div>${isOpen?`<div class="day-tasks">${day.tasks.map(t=>`<div class="day-task-row"><div class="day-task-cb ${t.done?'done':'undone'}">${t.done?'✓':'✕'}</div><span style="color:${t.done?'var(--t2)':'var(--t1)'};${t.done?'text-decoration:line-through':''}">${t.text}</span></div>`).join('')}</div>`:''}</div>`;}).join('');
 }
-function renderAll(){renderScores();renderAlert();renderOvHabits();renderOvProjects();renderOvTodo();renderMissed();renderFullHabits();renderProjects();renderCarried();renderFullTodo();}
+let mantraText='';
+function escM(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function renderMantras(){const el=document.getElementById('ov-mantras');if(!el)return;const lines=(mantraText||'').split(String.fromCharCode(10)).map(s=>s.trim()).filter(Boolean);el.innerHTML=lines.length?lines.map(l=>`<div style="font-size:13px;color:var(--t1);line-height:1.6;padding:7px 0;border-bottom:1px solid var(--bg4)">${escM(l)}</div>`).join(''):`<div style="font-size:12px;color:var(--t3);text-align:center;padding:14px 0">No mantras yet — tap Edit to add yours.</div>`;}
+function toggleMantraEdit(){const box=document.getElementById('mantra-edit');const btn=document.getElementById('mantra-edit-btn');if(box.style.display!=='none'){box.style.display='none';btn.textContent='Edit ✏';}else{document.getElementById('mantra-text').value=mantraText||'';box.style.display='block';btn.textContent='Close';document.getElementById('mantra-text').focus();}}
+async function saveMantras(){if(!currentUser)return;mantraText=document.getElementById('mantra-text').value;renderMantras();saveCache();document.getElementById('mantra-edit').style.display='none';document.getElementById('mantra-edit-btn').textContent='Edit ✏';showSave('saving','Saving...');try{const{error}=await db.from('mantras').upsert({user_id:currentUser.id,content:mantraText,updated_at:new Date().toISOString()},{onConflict:'user_id'});if(error)throw error;showSave('saved','✓ Saved');}catch(e){console.error('Save mantras error',e);showSave('error','⚠ Save failed — check connection');}}
+function renderAll(){renderScores();renderAlert();renderOvHabits();renderOvProjects();renderOvTodo();renderMantras();renderMissed();renderFullHabits();renderProjects();renderCarried();renderFullTodo();}
 function showModal(title,body,okLabel,isRed,onOk){document.getElementById('m-title').textContent=title;document.getElementById('m-body').textContent=body;const btn=document.getElementById('m-ok');btn.textContent=okLabel;btn.className='modal-ok'+(isRed?' red':'');btn.onclick=()=>{closeModal();onOk();};document.getElementById('modal').style.display='flex';}
 function closeModal(){document.getElementById('modal').style.display='none';}
 function priLabel(p){if(p==='high')return '<span class="td-pri pri-high">High</span>';if(p==='med')return '<span class="td-pri pri-med">Med</span>';return '<span class="td-pri pri-low">Low</span>';}
