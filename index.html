@@ -294,7 +294,7 @@
       <div class="three">
         <div class="panel"><div class="ph"><div class="pt">Today's habits</div><button class="plink" onclick="nav('habits')">View all →</button></div><div id="ov-habits"></div></div>
         <div class="panel"><div class="ph"><div class="pt">Active projects</div><button class="plink" onclick="nav('projects')">View all →</button></div><div id="ov-projects"></div></div>
-        <div class="panel"><div class="ph"><div class="pt">To-Do</div><button class="plink" onclick="nav('todo')">View all →</button></div><div id="ov-todo"></div></div><div class="panel"><div class="ph"><div class="pt">Mantras</div><button class="plink" id="mantra-edit-btn" onclick="toggleMantraEdit()">Edit ✏</button></div><div id="ov-mantras"></div><div id="mantra-edit" style="display:none;margin-top:6px"><textarea id="mantra-text" class="add-input" style="width:100%;min-height:90px;resize:vertical;font-family:inherit;line-height:1.7" placeholder="One mantra per line"></textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="add-submit" onclick="saveMantras()">Save</button><button class="add-btn" onclick="toggleMantraEdit()">Cancel</button></div></div></div>
+        <div class="panel"><div class="ph"><div class="pt">To-Do</div><button class="plink" onclick="nav('todo')">View all →</button></div><div id="ov-todo"></div></div><div class="panel"><div class="ph"><div class="pt">Mantras</div><button class="plink" id="mantra-edit-btn" onclick="toggleMantraEdit()">Edit ✏</button></div><div id="ov-mantras"></div><div id="mantra-edit" style="display:none;margin-top:6px"><textarea id="mantra-text" class="add-input" style="width:100%;min-height:90px;resize:vertical;font-family:inherit;line-height:1.7" placeholder="One mantra per line"></textarea><div style="display:flex;gap:8px;margin-top:10px"><button class="add-submit" onclick="saveMantras()">Save</button><button class="add-btn" onclick="toggleMantraEdit()">Cancel</button></div></div></div><div class="panel"><div class="ph"><div class="pt">Sleep Log</div><span id="sleep-today-label" style="font-size:10px;color:var(--t3)"></span></div><div style="font-size:11px;color:var(--t2);margin-bottom:7px">How did you sleep? (0 = none, 10 = best ever)</div><div id="sleep-score-row" style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:8px"></div><input id="sleep-note" class="add-input" placeholder="A note about last night..." style="width:100%;margin-bottom:8px" onchange="saveSleep()" /><button class="add-submit" onclick="saveSleep()">Save note</button><div id="sleep-weeks"></div><div id="sleep-heatmap" style="margin-top:14px"></div></div>
       </div>
     </div>
     <div id="v-habits" class="view">
@@ -480,25 +480,28 @@ function withTimeout(promise,ms=30000){
   return Promise.race([promise,new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]);
 }
 const CACHE_KEY='cc_cache_v1';
-function saveCache(){try{localStorage.setItem(CACHE_KEY,JSON.stringify({habits,projects,todos,mantras:mantraText,ts:Date.now()}));}catch(e){}}
+function saveCache(){try{localStorage.setItem(CACHE_KEY,JSON.stringify({habits,projects,todos,mantras:mantraText,sleep:sleepLogs,ts:Date.now()}));}catch(e){}}
 function loadCache(){
   try{
     const c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
     if(!c)return false;
     habits.splice(0,habits.length,...c.habits);
     projects.splice(0,projects.length,...c.projects);
-    todos.splice(0,todos.length,...c.todos);mantraText=c.mantras||'';
+    todos.splice(0,todos.length,...c.todos);mantraText=c.mantras||'';sleepLogs=c.sleep||{};
     return true;
   }catch(e){return false;}
 }
-function todayStr(){return new Date().toISOString().slice(0,10);}
+function dateStr(d){return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);}
+function todayStr(){return dateStr(new Date());}
+function isoWeek(date){const d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));const dayNum=d.getUTCDay()||7;d.setUTCDate(d.getUTCDate()+4-dayNum);const yearStart=new Date(Date.UTC(d.getUTCFullYear(),0,1));const weekNo=Math.ceil((((d-yearStart)/86400000)+1)/7);return {year:d.getUTCFullYear(),week:weekNo};}
+function parseLocal(x){return new Date(x+'T00:00:00');}
 async function checkDailyReset(){
   if(!currentUser)return;
   const today=todayStr();
   const needsReset=habits.filter(h=>h.last_reset_date!==today);
   if(!needsReset.length)return;
   const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
-  const yesterdayStr=yesterday.toISOString().slice(0,10);
+  const yesterdayStr=dateStr(yesterday);
   const done=habits.filter(h=>h.status==='done').length;
   const total=habits.length;
   if(total>0){
@@ -522,15 +525,16 @@ async function loadFromDB(){
   setLoading(true);
   const uid=currentUser.id;
   try{
-    const [{data:h},{data:p},{data:t},{data:m}]=await Promise.all([
+    const [{data:h},{data:p},{data:t},{data:m},{data:sl}]=await Promise.all([
       db.from('habits').select('*').eq('user_id',uid),
       db.from('projects').select('*').eq('user_id',uid),
       db.from('todos').select('*').eq('user_id',uid).order('rank'),
       db.from('mantras').select('content').eq('user_id',uid).maybeSingle(),
+      db.from('sleep_logs').select('log_date,score,note').eq('user_id',uid),
     ]);
     habits.splice(0,habits.length,...(h||[]));
     projects.splice(0,projects.length,...(p||[]));
-    todos.splice(0,todos.length,...(t||[]));mantraText=(m&&m.content)?m.content:mantraText;
+    todos.splice(0,todos.length,...(t||[]));mantraText=(m&&m.content)?m.content:mantraText;sleepLogs={};(sl||[]).forEach(r=>{sleepLogs[r.log_date]={score:r.score,note:r.note||''};});
     saveCache();
     await checkDailyReset();
   }catch(e){console.error('Load error',e);if(!hasCached)showSave('error','⚠ Could not load data — check connection');}
@@ -547,7 +551,7 @@ async function dbSaveHabit(h){
   if(!currentUser)return;
   showSave('saving','Saving...');
   try{
-    const row={name:h.name,icon:h.icon,cat:h.cat,type:h.type,streak:h.streak,pb:h.pb,status:h.status,rating:h.rating,freezes:h.freezes,last_reset_date:h.last_reset_date||todayStr(),user_id:currentUser.id};
+    const row={name:h.name,icon:h.icon,cat:h.cat,type:h.type,streak:h.streak,pb:h.pb,status:h.status,rating:h.rating,freezes:h.freezes,last_reset_date:h.last_reset_date||todayStr(),history:Array.isArray(h.history)?h.history:[],user_id:currentUser.id};
     if(h.id){const{error}=await withTimeout(db.from('habits').update(row).eq('id',h.id));if(error)throw error;}
     else{const{data,error}=await withTimeout(db.from('habits').insert(row).select().single());if(error)throw error;if(data)h.id=data.id;}
     showSave('saved','✓ Saved');saveCache();
@@ -588,11 +592,8 @@ function renderScores(){
   document.getElementById('scores').innerHTML=s.map(s=>`<div class="sc"><div class="sc-label">${s.label}</div><div class="sc-val">${s.val}<span style="font-size:13px;color:var(--t3)">%</span></div><div class="sc-sub">${s.sub}</div><div class="sc-bar"><div class="sc-fill" style="width:${s.val}%"></div></div></div>`).join('');
 }
 function renderAlert(){
-  const missed=habits.filter(h=>h.status==='missed');
   const el=document.getElementById('alert-bar');
-  if(!missed.length){el.style.display='none';return;}
-  el.style.display='flex';
-  document.getElementById('alert-text').textContent=missed.length+' habit'+(missed.length>1?'s':'')+' incomplete today — '+missed.map(h=>h.name).join(' · ');
+  if(el)el.style.display='none';
 }
 function renderOvHabits(){
   document.getElementById('ov-habits').innerHTML=habits.length===0?`<div style="font-size:12px;color:var(--t3);text-align:center;padding:16px 0">No habits yet — add one!</div>`:habits.slice(0,3).map((h,i)=>`<div class="hr"><div class="hicon">${h.icon||'⭐'}</div><div class="hinfo" onclick="toggleH(${i})"><div class="hname">${h.name}</div><div class="hbar-wrap"><div class="hbar" style="width:${Math.round(h.streak/Math.max(h.pb||1,1)*100)}%"></div></div><div class="hmeta">${h.streak>0?'🔥 '+h.streak+'d':'No streak'}</div></div><div class="hcheck ${h.status}" onclick="toggleH(${i})">${h.status==='done'?'✓':h.status==='missed'?'!':''}</div></div>`).join('');
@@ -606,20 +607,20 @@ function renderOvTodo(){
   document.getElementById('ov-todo').innerHTML=pending.length===0?`<div style="font-size:12px;color:var(--t3);text-align:center;padding:16px 0">All clear! ✓</div>`:pending.map(t=>{const i=todos.indexOf(t);return`<div class="tdr"><div class="td-check" onclick="toggleTodo(${i})"></div><div class="td-text">${t.text}</div>${priLabel(t.pri)}</div>`;}).join('');
 }
 function renderMissed(){
-  const missed=habits.filter(h=>h.status==='missed');
   const sec=document.getElementById('missed-section');
-  if(!missed.length){sec.style.display='none';return;}
-  sec.style.display='block';
-  document.getElementById('missed-list').innerHTML=missed.map(h=>{const i=habits.indexOf(h);return`<div class="hr" style="border-color:rgba(231,76,60,0.3);margin-bottom:6px"><div class="hicon">${h.icon||'⭐'}</div><div class="hinfo" onclick="toggleH(${i})"><div class="hname" style="color:#F08080">${h.name}</div><div class="hmeta" style="color:#A06060">Tap to mark complete</div></div><div class="hcheck missed" onclick="toggleH(${i})">!</div></div>`;}).join('');
+  if(sec)sec.style.display='none';
 }
 function renderFullHabits(){
   document.getElementById('full-habits').innerHTML=habits.length===0?`<div style="font-size:12px;color:var(--t3);text-align:center;padding:32px 0">No habits yet — add your first one above!</div>`:habits.map((h,i)=>{
     if(editingHabit===i){
       return`<div class="edit-form"><div style="font-size:10px;color:var(--o);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px">Edit Habit</div><div class="add-row" style="margin-bottom:8px"><input class="add-input" id="eh-icon-${i}" value="${h.icon||''}" placeholder="Emoji" style="max-width:90px;text-align:center" maxlength="2" /><input class="add-input" id="eh-name-${i}" value="${h.name}" placeholder="Habit name" /><select class="add-select" id="eh-cat-${i}"><option value="MIND" ${h.cat==='MIND'?'selected':''}>MIND</option><option value="BODY" ${h.cat==='BODY'?'selected':''}>BODY</option><option value="FOCUS" ${h.cat==='FOCUS'?'selected':''}>FOCUS</option><option value="SLEEP" ${h.cat==='SLEEP'?'selected':''}>SLEEP</option><option value="OTHER" ${h.cat==='OTHER'?'selected':''}>OTHER</option></select></div><div class="add-row"><button class="add-submit" onclick="saveHabitEdit(${i})">Save</button><button class="add-btn" onclick="cancelEdit()">Cancel</button></div></div>`;
     }
-    const pct=Math.round(h.streak/Math.max(h.pb||1,1)*100);
+    const cw=isoWeek(new Date());
+    const wkDone=(h.history||[]).filter(x=>{const w=isoWeek(parseLocal(x));return w.year===cw.year&&w.week===cw.week;}).length;
+    const ringPct=Math.round(Math.min(wkDone/7,1)*100);
+    const ring=`<div title="${wkDone} of 7 days this week" style="position:relative;width:32px;height:32px;border-radius:50%;background:conic-gradient(var(--o) ${ringPct}%, var(--bg4) ${ringPct}%);display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:23px;height:23px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--t1)">${wkDone}/7</div></div>`;
     const stars=h.type==='scale'?`<div class="stars">${[1,2,3,4,5].map(s=>`<div class="star ${h.rating>=s?'on':''}" onclick="setRating(${i},${s});event.stopPropagation()"></div>`).join('')}</div>`:'';
-    return`<div class="fhr"><div class="fhr-top"><div style="font-size:18px">${h.icon||'⭐'}</div><div class="fhr-name">${h.name}</div>${stars}<div class="fhr-streak">${h.streak>0?'🔥'+h.streak:''}</div><div class="fcheck ${h.status}" onclick="toggleH(${i})">${h.status==='done'?'✓':h.status==='missed'?'!':''}</div><button class="edit-btn" onclick="editingHabit=${i};renderFullHabits()">✏</button><button class="del-btn" onclick="deleteHabit(${i})">✕</button></div><div class="fhr-bar-row"><div class="fhr-bar-wrap"><div class="fhr-bar" style="width:${pct}%"></div></div><div class="fhr-pb">PB ${h.pb||0}d</div></div><div class="fhr-meta"><div class="fhr-cat">${h.cat}</div>${h.freezes>0?`<div class="freeze" onclick="useFreeze(${i});event.stopPropagation()">❄ ${h.freezes} freeze${h.freezes>1?'s':''}</div>`:''}<div class="pb-badge">${pct}% of PB</div></div></div>`;
+    return`<div class="fhr"><div class="fhr-top"><div style="font-size:18px">${h.icon||'⭐'}</div><div class="fhr-name">${h.name}</div>${stars}<div class="fhr-streak">${h.streak>0?'🔥'+h.streak:''}</div>${ring}<div class="fcheck ${h.status}" onclick="toggleH(${i})">${h.status==='done'?'✓':h.status==='missed'?'✗':''}</div><button class="edit-btn" onclick="editingHabit=${i};renderFullHabits()">✏</button><button class="del-btn" onclick="deleteHabit(${i})">✕</button></div><div class="fhr-meta"><div class="fhr-cat">${h.cat}</div>${h.freezes>0?`<div class="freeze" onclick="useFreeze(${i});event.stopPropagation()">❄ ${h.freezes} freeze${h.freezes>1?'s':''}</div>`:''}<div class="pb-badge">🔥 ${h.streak||0} · PB ${h.pb||0}d · ${wkDone}/7 this week</div></div></div>`;
   }).join('');
 }
 async function loadHeatmapData(){
@@ -637,7 +638,7 @@ async function renderHeatmap(){
   const dayLabels=['M','T','W','T','F','S','S'];
   const dayCol=dayLabels.map(l=>`<div style="height:12px;display:flex;align-items:center;font-size:9px;color:var(--t3);width:12px;justify-content:center">${l}</div>`).join('');
   let cols='';
-  for(let w=weeks-1;w>=0;w--){let cells='';for(let d=0;d<days;d++){const date=new Date(today);date.setDate(today.getDate()-((w*7)+(days-1-d)));const isFuture=date>today;const dateStr=date.toISOString().slice(0,10);const score=isFuture?0:(logMap[dateStr]!==undefined?logMap[dateStr]:null);const bg=isFuture?'#131313':score===null?'#181818':hmColor(score);cells+=`<div class="hm-cell" style="background:${bg}" title="${isFuture?'Future':dateStr+(score!==null?': '+Math.round(score*100)+'%':' — no data')}"></div>`;}cols+=`<div style="display:flex;flex-direction:column;gap:3px">${cells}</div>`;}
+  for(let w=weeks-1;w>=0;w--){let cells='';for(let d=0;d<days;d++){const date=new Date(today);date.setDate(today.getDate()-((w*7)+(days-1-d)));const isFuture=date>today;const dk=dateStr(date);const score=isFuture?0:(logMap[dk]!==undefined?logMap[dk]:null);const bg=isFuture?'#131313':score===null?'#181818':hmColor(score);cells+=`<div class="hm-cell" style="background:${bg}" title="${isFuture?'Future':dk+(score!==null?': '+Math.round(score*100)+'%':' — no data')}"></div>`;}cols+=`<div style="display:flex;flex-direction:column;gap:3px">${cells}</div>`;}
   const el=document.getElementById('heatmap');
   if(el)el.innerHTML=`<div style="display:flex;gap:3px"><div style="display:flex;flex-direction:column;gap:3px;margin-right:4px">${dayCol}</div><div style="display:flex;gap:3px">${cols}</div></div><div style="display:flex;align-items:center;gap:6px;margin-top:12px"><span style="font-size:10px;color:var(--t3)">No data</span><div style="width:10px;height:10px;border-radius:2px;background:#181818"></div><div style="width:10px;height:10px;border-radius:2px;background:${O}"></div><span style="font-size:10px;color:var(--t2)">Partial</span><div style="width:10px;height:10px;border-radius:2px;background:${YELLOW}"></div><span style="font-size:10px;color:var(--t2)">50/50</span><div style="width:10px;height:10px;border-radius:2px;background:${GREEN}"></div><span style="font-size:10px;color:var(--t2)">Perfect</span></div>`;
 }
@@ -678,12 +679,22 @@ function escM(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 function renderMantras(){const el=document.getElementById('ov-mantras');if(!el)return;const lines=(mantraText||'').split(String.fromCharCode(10)).map(s=>s.trim()).filter(Boolean);el.innerHTML=lines.length?lines.map(l=>`<div style="font-size:13px;color:var(--t1);line-height:1.6;padding:7px 0;border-bottom:1px solid var(--bg4)">${escM(l)}</div>`).join(''):`<div style="font-size:12px;color:var(--t3);text-align:center;padding:14px 0">No mantras yet — tap Edit to add yours.</div>`;}
 function toggleMantraEdit(){const box=document.getElementById('mantra-edit');const btn=document.getElementById('mantra-edit-btn');if(box.style.display!=='none'){box.style.display='none';btn.textContent='Edit ✏';}else{document.getElementById('mantra-text').value=mantraText||'';box.style.display='block';btn.textContent='Close';document.getElementById('mantra-text').focus();}}
 async function saveMantras(){if(!currentUser)return;mantraText=document.getElementById('mantra-text').value;renderMantras();saveCache();document.getElementById('mantra-edit').style.display='none';document.getElementById('mantra-edit-btn').textContent='Edit ✏';showSave('saving','Saving...');try{const{error}=await db.from('mantras').upsert({user_id:currentUser.id,content:mantraText,updated_at:new Date().toISOString()},{onConflict:'user_id'});if(error)throw error;showSave('saved','✓ Saved');}catch(e){console.error('Save mantras error',e);showSave('error','⚠ Save failed — check connection');}}
-function renderAll(){renderScores();renderAlert();renderOvHabits();renderOvProjects();renderOvTodo();renderMantras();renderMissed();renderFullHabits();renderProjects();renderCarried();renderFullTodo();}
+let sleepLogs={};
+function sleepColor(s){if(s===null||s===undefined)return '#181818';const f=s/10;if(s===0)return '#3a0d0d';if(f<0.3)return '#E74C3C';if(f<0.5)return '#C8731E';if(f<0.7)return '#E8820C';if(f<0.9)return '#C8E830';return '#2ECC71';}
+function todaySleep(){return sleepLogs[todayStr()]||{score:null,note:''};}
+function renderSleep(){const row=document.getElementById('sleep-score-row');if(!row)return;const cur=todaySleep();row.innerHTML=[0,1,2,3,4,5,6,7,8,9,10].map(n=>`<button onclick="selectSleepScore(${n})" style="width:23px;height:23px;border-radius:4px;border:1px solid ${cur.score===n?'var(--o)':'var(--border2)'};background:${cur.score===n?'var(--o2)':'var(--bg4)'};color:${cur.score===n?'var(--o)':'var(--t2)'};font-size:11px;cursor:pointer;padding:0">${n}</button>`).join('');const note=document.getElementById('sleep-note');if(note&&document.activeElement!==note)note.value=cur.note||'';const lbl=document.getElementById('sleep-today-label');if(lbl)lbl.textContent=cur.score!=null?('last night '+cur.score+'/10'):'not logged';renderSleepWeeks();renderSleepHeatmap();}
+async function selectSleepScore(n){const d=todayStr();const cur=sleepLogs[d]||{score:null,note:''};const note=document.getElementById('sleep-note');sleepLogs[d]={score:n,note:note?note.value:(cur.note||'')};renderSleep();saveCache();await dbSaveSleep(d);}
+async function saveSleep(){const d=todayStr();const cur=sleepLogs[d]||{score:null,note:''};const note=document.getElementById('sleep-note');sleepLogs[d]={score:cur.score,note:note?note.value:''};renderSleep();saveCache();await dbSaveSleep(d);}
+async function dbSaveSleep(d){if(!currentUser)return;const e=sleepLogs[d]||{score:null,note:''};showSave('saving','Saving...');try{const{error}=await db.from('sleep_logs').upsert({user_id:currentUser.id,log_date:d,score:e.score,note:e.note,updated_at:new Date().toISOString()},{onConflict:'user_id,log_date'});if(error)throw error;showSave('saved','✓ Saved');}catch(err){console.error('Save sleep error',err);showSave('error','⚠ Save failed — check connection');}}
+function sleepWeeks(){const map={};Object.keys(sleepLogs).forEach(d=>{const e=sleepLogs[d];if(e&&e.score!=null){const w=isoWeek(parseLocal(d));const k=w.year+'-'+w.week;if(!map[k])map[k]={year:w.year,week:w.week,sum:0,count:0};map[k].sum+=e.score;map[k].count++;}});return Object.values(map).sort((a,b)=>b.year-a.year||b.week-a.week);}
+function renderSleepWeeks(){const el=document.getElementById('sleep-weeks');if(!el)return;const cw=isoWeek(new Date());const weeks=sleepWeeks();const cur=weeks.find(w=>w.year===cw.year&&w.week===cw.week);const curAvg=cur?(cur.sum/cur.count):null;const hist=weeks.filter(w=>!(w.year===cw.year&&w.week===cw.week)).slice(0,12);el.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:8px 10px;margin:12px 0 8px"><div style="font-size:12px;color:var(--t1)">Week ${cw.week}</div><div style="font-size:15px;color:var(--o);font-weight:500">${curAvg!=null?curAvg.toFixed(1)+' /10':'—'}</div></div>`+(hist.length?`<div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;margin:8px 0 4px">History</div><div style="max-height:150px;overflow-y:auto">`+hist.map(w=>{const a=w.sum/w.count;return `<div style="display:flex;align-items:center;gap:8px;padding:5px 2px;border-bottom:1px solid var(--bg4)"><div style="width:8px;height:8px;border-radius:2px;background:${sleepColor(Math.round(a))};flex-shrink:0"></div><div style="flex:1;font-size:12px;color:var(--t2)">Week ${w.week}</div><div style="font-size:12px;color:var(--t1)">${a.toFixed(1)}</div></div>`;}).join('')+`</div>`:'');}
+function renderSleepHeatmap(){const el=document.getElementById('sleep-heatmap');if(!el)return;const weeks=12,days=7,today=new Date();let cols='';for(let w=weeks-1;w>=0;w--){let cells='';for(let dd=0;dd<days;dd++){const date=new Date(today);date.setDate(today.getDate()-((w*7)+(days-1-dd)));const isFuture=date>today;const ds=dateStr(date);const entry=sleepLogs[ds];const score=(entry&&entry.score!=null)?entry.score:null;const bg=isFuture?'#131313':sleepColor(score);cells+=`<div style="width:11px;height:11px;border-radius:2px;background:${bg}" title="${isFuture?'Future':ds+(score!=null?': '+score+'/10':' — no data')}"></div>`;}cols+=`<div style="display:flex;flex-direction:column;gap:2px">${cells}</div>`;}el.innerHTML=`<div style="font-size:10px;color:var(--o);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">12-week sleep map</div><div style="display:flex;gap:2px;overflow-x:auto">${cols}</div><div style="display:flex;align-items:center;gap:5px;margin-top:8px"><span style="font-size:9px;color:var(--t3)">Rough</span><div style="width:9px;height:9px;border-radius:2px;background:#E74C3C"></div><div style="width:9px;height:9px;border-radius:2px;background:#E8820C"></div><div style="width:9px;height:9px;border-radius:2px;background:#C8E830"></div><div style="width:9px;height:9px;border-radius:2px;background:#2ECC71"></div><span style="font-size:9px;color:var(--t3)">Great</span></div>`;}
+function renderAll(){renderScores();renderAlert();renderOvHabits();renderOvProjects();renderOvTodo();renderMantras();renderSleep();renderMissed();renderFullHabits();renderProjects();renderCarried();renderFullTodo();}
 function showModal(title,body,okLabel,isRed,onOk){document.getElementById('m-title').textContent=title;document.getElementById('m-body').textContent=body;const btn=document.getElementById('m-ok');btn.textContent=okLabel;btn.className='modal-ok'+(isRed?' red':'');btn.onclick=()=>{closeModal();onOk();};document.getElementById('modal').style.display='flex';}
 function closeModal(){document.getElementById('modal').style.display='none';}
 function priLabel(p){if(p==='high')return '<span class="td-pri pri-high">High</span>';if(p==='med')return '<span class="td-pri pri-med">Med</span>';return '<span class="td-pri pri-low">Low</span>';}
-async function toggleH(i){const c={pending:'done',done:'missed',missed:'pending'};habits[i].status=c[habits[i].status];if(habits[i].status==='done'&&habits[i].streak===0)habits[i].streak=1;renderAll();await dbSaveHabit(habits[i]);}
-async function setRating(i,r){habits[i].rating=r;if(habits[i].status==='pending')habits[i].status='done';renderAll();await dbSaveHabit(habits[i]);}
+async function toggleH(i){const h=habits[i];const c={pending:'done',done:'missed',missed:'pending'};h.status=c[h.status];h.history=Array.isArray(h.history)?h.history:[];const d=todayStr();if(h.status==='done'){if(!h.history.includes(d))h.history.push(d);if(h.streak===0)h.streak=1;}else{h.history=h.history.filter(x=>x!==d);}renderAll();await dbSaveHabit(h);}
+async function setRating(i,r){const h=habits[i];h.rating=r;if(h.status==='pending')h.status='done';h.history=Array.isArray(h.history)?h.history:[];const d=todayStr();if(h.status==='done'&&!h.history.includes(d))h.history.push(d);renderAll();await dbSaveHabit(h);}
 async function useFreeze(i){if(habits[i].freezes>0&&habits[i].status==='missed'){habits[i].freezes--;habits[i].status='pending';renderAll();await dbSaveHabit(habits[i]);}}
 async function toggleTask(pi,ti){projects[pi].done[ti]=!projects[pi].done[ti];const done=projects[pi].done.filter(Boolean).length;projects[pi].pct=projects[pi].tasks.length?Math.round(done/projects[pi].tasks.length*100):0;renderProjects();await dbSaveProject(projects[pi]);}
 async function toggleTodo(i){todos[i].done=!todos[i].done;if(todos[i].carried&&todos[i].done)todos[i].carried=false;renderOvTodo();renderCarried();renderFullTodo();await dbSaveTodo(todos[i]);}
@@ -697,7 +708,7 @@ async function saveHabitEdit(i){const name=document.getElementById('eh-name-'+i)
 async function saveProjectEdit(pi){const name=document.getElementById('ep-name-'+pi).value.trim();const due=document.getElementById('ep-due-'+pi).value.trim()||'No deadline';const tagsRaw=document.getElementById('ep-tags-'+pi).value.trim();if(!name)return;projects[pi].name=name;projects[pi].due=due;projects[pi].tags=tagsRaw?tagsRaw.split(',').map(t=>t.trim()).filter(Boolean):[];editingProject=null;renderProjects();renderOvProjects();await dbSaveProject(projects[pi]);}
 async function saveTodoEdit(i){const text=document.getElementById('et-text-'+i).value.trim();if(!text)return;todos[i].text=text;editingTodo=null;renderFullTodo();renderOvTodo();await dbSaveTodo(todos[i]);}
 function toggleHabitForm(){const f=document.getElementById('habit-form');f.style.display=f.style.display==='none'?'block':'none';if(f.style.display==='block')document.getElementById('habit-name').focus();}
-async function submitHabit(){const name=document.getElementById('habit-name').value.trim();const icon=document.getElementById('habit-icon').value.trim()||'⭐';const cat=document.getElementById('habit-cat').value;const type=document.getElementById('habit-type').value;if(!name)return;const h={name,icon,cat,type,streak:0,pb:0,status:'pending',rating:0,freezes:0,last_reset_date:todayStr()};habits.push(h);renderAll();document.getElementById('habit-name').value='';document.getElementById('habit-icon').value='';document.getElementById('habit-form').style.display='none';await dbSaveHabit(h);}
+async function submitHabit(){const name=document.getElementById('habit-name').value.trim();const icon=document.getElementById('habit-icon').value.trim()||'⭐';const cat=document.getElementById('habit-cat').value;const type=document.getElementById('habit-type').value;if(!name)return;const h={name,icon,cat,type,streak:0,pb:0,status:'pending',rating:0,freezes:0,last_reset_date:todayStr(),history:[]};habits.push(h);renderAll();document.getElementById('habit-name').value='';document.getElementById('habit-icon').value='';document.getElementById('habit-form').style.display='none';await dbSaveHabit(h);}
 function toggleProjForm(){const f=document.getElementById('proj-form');const isOpen=f.style.display!=='none'&&f.style.display!=='';f.style.display=isOpen?'none':'block';document.getElementById('new-proj-btn').style.display=isOpen?'':'none';if(!isOpen)document.getElementById('proj-name').focus();}
 async function submitProject(){const name=document.getElementById('proj-name').value.trim();const due=document.getElementById('proj-due').value.trim()||'No deadline';const tagsRaw=document.getElementById('proj-tags').value.trim();const tasksRaw=document.getElementById('proj-tasks').value.trim();if(!name)return;const tags=tagsRaw?tagsRaw.split(',').map(t=>t.trim()).filter(Boolean):[];const tasks=tasksRaw?tasksRaw.split(',').map(t=>t.trim()).filter(Boolean):[];const p={name,pct:0,due,tags,tasks,done:tasks.map(()=>false),archived:false,archived_date:null};projects.push(p);['proj-name','proj-due','proj-tags','proj-tasks'].forEach(id=>document.getElementById(id).value='');document.getElementById('proj-form').style.display='none';document.getElementById('new-proj-btn').style.display='';renderProjects();renderOvProjects();await dbSaveProject(p);}
 function toggleAddTask(pi){const row=document.getElementById('add-task-row-'+pi);if(!row)return;row.classList.toggle('open');if(row.classList.contains('open'))document.getElementById('task-input-'+pi).focus();}
