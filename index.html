@@ -330,7 +330,7 @@
       <div class="scores" id="scores"></div>
       <div class="alert" id="alert-bar" style="display:none"><div class="adot"></div><div class="atext" id="alert-text"></div></div>
       <div class="three">
-<div class="panel" id="notif-panel"><div class="ph"><span>NOTIFICATIONS</span></div><div style="font-size:13px;color:var(--t2);margin-bottom:10px" id="notif-status">Checking...</div><button class="hbtn" id="notif-enable-btn" onclick="enablePush()" style="display:none">Enable notifications</button><button class="hbtn" id="notif-test-btn" onclick="sendTestPush()" style="display:none;margin-left:8px">Send test</button></div>
+<div class="panel" id="notif-panel"><div class="ph"><span>NOTIFICATIONS</span></div><div style="font-size:13px;color:var(--t2);margin-bottom:10px" id="notif-status">Telegram — tap to test</div><button class="hbtn" id="notif-test-btn" onclick="sendTelegramTest()">Send test</button></div>
         <div class="panel"><div class="ph"><div class="pt">Today's habits</div><button class="plink" onclick="nav('habits')">View all →</button></div><div id="ov-habits"></div></div>
         <div class="panel"><div class="ph"><div class="pt">Active projects</div><button class="plink" onclick="nav('projects')">View all →</button></div><div id="ov-projects"></div></div>
         <div class="panel"><div class="ph"><div class="pt">To-Do</div><button class="plink" onclick="nav('todo')">View all →</button></div><div id="ov-todo"></div></div><div class="panel"><div class="ph"><div class="pt">Mantras</div><button class="plink" id="mantra-add-btn" onclick="startAddMantra()">+ Add</button></div><div id="ov-mantras"></div></div><div class="panel"><div class="ph"><div class="pt">Sleep Log</div></div><div id="sleep-entry"></div><div id="sleep-weeks"></div><div id="sleep-heatmap" style="margin-top:14px"></div></div>
@@ -781,56 +781,18 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeEleme
 renderAll();renderHeatmap();tick();setInterval(tick,1000);
 startKeepalive();
 
-const VAPID_PUBLIC_KEY='BGwsLx-eHNeAMr7KcQ1YXVq26670czNvrsZHQt-1tYH27Rs4JcVkxLD49prUgmnZuFpCEnuEv8JTjMNvMVtw1RE';
-let pushSub=null;
-function urlBase64ToUint8Array(base64String){const padding='='.repeat((4-base64String.length%4)%4);const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');const raw=atob(base64);const out=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++){out[i]=raw.charCodeAt(i);}return out;}
-async function initPushUI(){
+async function sendTelegramTest(){
   const statusEl=document.getElementById('notif-status');
-  if(!statusEl)return;
-  if(!('serviceWorker' in navigator)||!('PushManager' in window)){statusEl.textContent='Not supported in this browser.';return;}
+  statusEl.textContent='Sending...';
   try{
-    const reg=await navigator.serviceWorker.register('/sw.js');
-    const existing=await reg.pushManager.getSubscription();
-    if(existing){
-      pushSub=existing;
-      statusEl.textContent='Enabled on this device.';
-      document.getElementById('notif-test-btn').style.display='inline-block';
-    }else if(Notification.permission==='denied'){
-      statusEl.textContent='Blocked — enable notifications for this site in iPhone Settings.';
-    }else{
-      statusEl.textContent='Not enabled on this device yet.';
-      document.getElementById('notif-enable-btn').style.display='inline-block';
-    }
-  }catch(e){statusEl.textContent='Setup error: '+e.message;}
-}
-async function enablePush(){
-  const statusEl=document.getElementById('notif-status');
-  try{
-    const perm=await Notification.requestPermission();
-    if(perm!=='granted'){statusEl.textContent='Permission not granted.';return;}
-    const reg=await navigator.serviceWorker.ready;
-    const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)});
-    pushSub=sub;
-    if(db&&currentUser){
-      await db.from('push_subscriptions').upsert({user_id:currentUser.id,subscription:sub.toJSON(),updated_at:new Date().toISOString()});
-    }
-    statusEl.textContent='Enabled on this device.';
-    document.getElementById('notif-enable-btn').style.display='none';
-    document.getElementById('notif-test-btn').style.display='inline-block';
-  }catch(e){statusEl.textContent='Could not enable: '+e.message;}
-}
-async function sendTestPush(){
-  const statusEl=document.getElementById('notif-status');
-  if(!pushSub){statusEl.textContent='Not enabled yet.';return;}
-  try{
-    const r=await fetch('/api/send-test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subscription:pushSub.toJSON(),title:'Command Centre',body:'Test notification — if you see this, it works!'})});
-    if(r.ok){statusEl.textContent='Test sent — check your phone.';}
-    else{const j=await r.json().catch(()=>({}));statusEl.textContent='Send failed: '+(j.error||r.status);}
+    const r=await fetch('/api/send-telegram',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'Test notification from Command Centre — if you see this, it works!'})});
+    const j=await r.json().catch(()=>({}));
+    if(r.ok && j.ok){statusEl.textContent='Sent — check Telegram.';}
+    else{statusEl.textContent='Send failed: '+(j.error||r.status);}
   }catch(e){statusEl.textContent='Send failed: '+e.message;}
 }
 initAuth();
 setTimeout(function(){var sp=document.getElementById('cc-splash');if(sp)sp.style.display='none';},3200);
-setTimeout(initPushUI,600);
 
 </script>
 </body>
