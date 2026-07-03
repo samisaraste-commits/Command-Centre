@@ -330,7 +330,7 @@
       <div class="scores" id="scores"></div>
       <div class="alert" id="alert-bar" style="display:none"><div class="adot"></div><div class="atext" id="alert-text"></div></div>
       <div class="three">
-<div class="panel" id="notif-panel"><div class="ph"><span>NOTIFICATIONS</span></div><div style="font-size:13px;color:var(--t2);margin-bottom:10px" id="notif-status">Telegram — tap to test</div><button class="hbtn" id="notif-test-btn" onclick="sendTelegramTest()">Send test</button></div>
+
         <div class="panel"><div class="ph"><div class="pt">Today's habits</div><button class="plink" onclick="nav('habits')">View all →</button></div><div id="ov-habits"></div></div>
         <div class="panel"><div class="ph"><div class="pt">Active projects</div><button class="plink" onclick="nav('projects')">View all →</button></div><div id="ov-projects"></div></div>
         <div class="panel"><div class="ph"><div class="pt">To-Do</div><button class="plink" onclick="nav('todo')">View all →</button></div><div id="ov-todo"></div></div><div class="panel"><div class="ph"><div class="pt">Mantras</div><button class="plink" id="mantra-add-btn" onclick="startAddMantra()">+ Add</button></div><div id="ov-mantras"></div></div><div class="panel"><div class="ph"><div class="pt">Sleep Log</div></div><div id="sleep-entry"></div><div id="sleep-weeks"></div><div id="sleep-heatmap" style="margin-top:14px"></div></div>
@@ -395,6 +395,7 @@
         <div class="add-row">
           <input class="add-input" id="todo-input" placeholder="What needs to be done?" />
           <select class="add-select" id="todo-pri"><option value="high">🔴 High</option><option value="med" selected>🟠 Medium</option><option value="low">⚪ Low</option></select>
+          <input type="datetime-local" id="todo-due" class="add-select" style="min-width:180px" title="Optional due date/time — enables Telegram reminders" />
           <button class="add-submit" onclick="submitTodo()">Add</button>
         </div>
       </div>
@@ -610,7 +611,7 @@ async function dbSaveTodo(t){
   if(!currentUser)return;
   showSave('saving','Saving...');
   try{
-    const row={text:t.text,pri:t.pri,done:t.done,rank:t.rank,carried:t.carried,user_id:currentUser.id};
+    const row={text:t.text,pri:t.pri,done:t.done,rank:t.rank,carried:t.carried,due_at:t.due_at||null,completed_at:t.completed_at||null,last_checkpoint_sent:(t.last_checkpoint_sent===undefined?null:t.last_checkpoint_sent),user_id:currentUser.id};
     if(t.id){const{error}=await withTimeout(db.from('todos').update(row).eq('id',t.id));if(error)throw error;}
     else{const{data,error}=await withTimeout(db.from('todos').insert(row).select().single());if(error)throw error;if(data)t.id=data.id;}
     showSave('saved','✓ Saved');saveCache();
@@ -749,7 +750,7 @@ async function toggleH(i){const h=habits[i];const c={pending:'done',done:'partia
 async function setRating(i,r){const h=habits[i];h.rating=r;if(h.status==='pending')h.status='done';const map=histMap(h);const d=todayStr();if(h.status==='done')map[d]='done';renderAll();await dbSaveHabit(h);}
 async function useFreeze(i){if(habits[i].freezes>0&&habits[i].status==='missed'){habits[i].freezes--;habits[i].status='pending';renderAll();await dbSaveHabit(habits[i]);}}
 async function toggleTask(pi,ti){projects[pi].done[ti]=!projects[pi].done[ti];const done=projects[pi].done.filter(Boolean).length;projects[pi].pct=projects[pi].tasks.length?Math.round(done/projects[pi].tasks.length*100):0;renderProjects();await dbSaveProject(projects[pi]);}
-async function toggleTodo(i){todos[i].done=!todos[i].done;if(todos[i].carried&&todos[i].done)todos[i].carried=false;renderOvTodo();renderCarried();renderFullTodo();await dbSaveTodo(todos[i]);}
+async function toggleTodo(i){todos[i].done=!todos[i].done;if(todos[i].carried&&todos[i].done)todos[i].carried=false;if(todos[i].done){todos[i].completed_at=new Date().toISOString();}else{todos[i].completed_at=null;}renderOvTodo();renderCarried();renderFullTodo();await dbSaveTodo(todos[i]);}
 function confirmComplete(i){showModal('Mark project complete?','"'+projects[i].name+'" will move to the Archive.','Yes, complete it',false,()=>completeProject(i));}
 async function completeProject(i){projects[i].archived=true;projects[i].pct=100;projects[i].done=projects[i].done.map(()=>true);projects[i].archived_date=new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});renderProjects();renderOvProjects();await dbSaveProject(projects[i]);}
 function deleteHabit(i){showModal('Delete habit?','"'+habits[i].name+'" will be permanently removed.','Delete',true,async()=>{const id=habits[i].id;habits.splice(i,1);renderAll();await dbDel('habits',id);});}
@@ -766,7 +767,7 @@ async function submitProject(){const name=document.getElementById('proj-name').v
 function toggleAddTask(pi){const row=document.getElementById('add-task-row-'+pi);if(!row)return;row.classList.toggle('open');if(row.classList.contains('open'))document.getElementById('task-input-'+pi).focus();}
 async function submitTask(pi){const input=document.getElementById('task-input-'+pi);const text=input.value.trim();if(!text)return;projects[pi].tasks.push(text);projects[pi].done.push(false);projects[pi].pct=Math.round(projects[pi].done.filter(Boolean).length/projects[pi].tasks.length*100);input.value='';renderProjects();renderOvProjects();await dbSaveProject(projects[pi]);}
 function toggleForm(){const f=document.getElementById('todo-form');f.style.display=f.style.display==='none'?'block':'none';if(f.style.display==='block')document.getElementById('todo-input').focus();}
-async function submitTodo(){const input=document.getElementById('todo-input');const pri=document.getElementById('todo-pri').value;const text=input.value.trim();if(!text)return;const t={text,pri,done:false,rank:todos.length,carried:false};todos.unshift(t);todos.forEach((td,i)=>td.rank=i);input.value='';document.getElementById('todo-form').style.display='none';renderOvTodo();renderFullTodo();await dbSaveTodo(t);}
+async function submitTodo(){const input=document.getElementById('todo-input');const pri=document.getElementById('todo-pri').value;const dueInput=document.getElementById('todo-due');const dueVal=dueInput&&dueInput.value?new Date(dueInput.value).toISOString():null;const text=input.value.trim();if(!text)return;const t={text,pri,done:false,rank:todos.length,carried:false,due_at:dueVal,completed_at:null,last_checkpoint_sent:null};todos.unshift(t);todos.forEach((td,i)=>td.rank=i);input.value='';if(dueInput)dueInput.value='';document.getElementById('todo-form').style.display='none';renderOvTodo();renderFullTodo();await dbSaveTodo(t);}
 function setFilter(f,btn){activeFilter=f;document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderFullTodo();}
 function dragStart(e,i){dragSrcIdx=i;setTimeout(()=>{const el=document.querySelector(`[data-idx="${i}"]`);if(el)el.classList.add('dragging');},0);}
 function dragOver(e){e.preventDefault();e.currentTarget.classList.add('drag-over');}
@@ -780,17 +781,6 @@ function tick(){const n=new Date();document.getElementById('clk').textContent=['
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement.id==='todo-input')submitTodo();if(e.key==='Escape')closeModal();});
 renderAll();renderHeatmap();tick();setInterval(tick,1000);
 startKeepalive();
-
-async function sendTelegramTest(){
-  const statusEl=document.getElementById('notif-status');
-  statusEl.textContent='Sending...';
-  try{
-    const r=await fetch('/api/send-telegram',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'Test notification from Command Centre — if you see this, it works!'})});
-    const j=await r.json().catch(()=>({}));
-    if(r.ok && j.ok){statusEl.textContent='Sent — check Telegram.';}
-    else{statusEl.textContent='Send failed: '+(j.error||r.status);}
-  }catch(e){statusEl.textContent='Send failed: '+e.message;}
-}
 initAuth();
 setTimeout(function(){var sp=document.getElementById('cc-splash');if(sp)sp.style.display='none';},3200);
 
