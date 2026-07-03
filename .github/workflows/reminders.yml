@@ -1,0 +1,13 @@
+name: Command Centre Reminders
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call reminders endpoint
+        run: curl -sf -X POST https://command-centre-liard.vercel.app/api/check-reminders
