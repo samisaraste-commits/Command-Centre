@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 
 const SUPABASE_URL = 'https://wdtcygterxwqqashtqkr.supabase.co';
+const DASH_URL = 'https://command-centre-liard.vercel.app';
 
 function db(){
   return createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -12,10 +13,13 @@ async function sendTelegram(text){
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ chat_id: chatId, text, reply_markup: { inline_keyboard: [[{ text: '\u2197 Open dashboard', url: 'https://command-centre-liard.vercel.app' }]] } })
+    body: JSON.stringify({ chat_id: chatId, text, reply_markup: { inline_keyboard: [[{ text: '\u2197 Open dashboard', url: DASH_URL }]] } })
   });
 }
 
+function todayHelsinki(){
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Helsinki' });
+}
 function helsinkiNowISO(){
   return new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Helsinki' }).replace(' ', 'T');
 }
@@ -23,12 +27,11 @@ function helsinkiNowISO(){
 async function gatherContext(supa, userId){
   const [{ data: todos }, { data: projects }, { data: habits }, { data: mantraRow }, { data: sleep }] = await Promise.all([
     supa.from('todos').select('text,pri,done,due_at,completed_at').eq('user_id', userId),
-    supa.from('projects').select('name,pct,due,tags,done,archived').eq('user_id', userId).eq('archived', false),
-    supa.from('habits').select('name,cat,streak,pb,status,history').eq('user_id', userId),
+    supa.from('projects').select('name,pct,due,tags,tasks,done,archived').eq('user_id', userId).eq('archived', false),
+    supa.from('habits').select('name,icon,cat,type,streak,pb,status,history').eq('user_id', userId),
     supa.from('mantras').select('content').eq('user_id', userId).maybeSingle(),
     supa.from('sleep_logs').select('log_date,score,note').eq('user_id', userId).order('log_date', {ascending:false}).limit(21)
   ]);
-  // Trim habit history to last 14 days to keep context small
   const trimmedHabits = (habits||[]).map(h => {
     let hist = h.history || {};
     if(Array.isArray(hist)){ const m={}; hist.forEach(d=>m[d]='done'); hist=m; }
@@ -55,20 +58,43 @@ The JSON must have this shape:
   "reply": "the message to send back to Sami in Telegram"
 }
 
-Supported action objects:
-1. Create a to-do: {"type":"create_todo","text":"...","pri":"high"|"med"|"low","due_at":"ISO datetime in UTC or null"}
-2. Complete a to-do: {"type":"complete_todo","match":"text to find the todo by"}
-3. Delete a to-do: {"type":"delete_todo","match":"text to find the todo by"}
+Supported actions:
+
+TO-DOS:
+- {"type":"create_todo","text":"...","pri":"high"|"med"|"low","due_at":"ISO UTC datetime or null"}
+- {"type":"update_todo","match":"find by text","text":"new text or null","pri":"new pri or null","due_at":"new ISO UTC or null (null = leave unchanged)","clear_due":true|false}
+- {"type":"complete_todo","match":"..."}
+- {"type":"uncomplete_todo","match":"..."}
+- {"type":"delete_todo","match":"..."}
+
+HABITS:
+- {"type":"create_habit","name":"...","cat":"MIND"|"BODY"|"SLEEP"|"WORK"|"OTHER","icon":"single emoji"}
+- {"type":"set_habit_today","match":"find by name","status":"done"|"partial"|"missed"|"pending"}  (sets today's state; pending = clear today)
+- {"type":"rename_habit","match":"...","name":"new name"}
+- {"type":"delete_habit","match":"..."}
+
+PROJECTS:
+- {"type":"create_project","name":"...","due":"free text deadline or 'No deadline'","tags":["tag1"],"tasks":["task1"]}
+- {"type":"update_project","match":"find by name","name":null,"pct":0-100 or null,"due":null,"add_task":"task text or null"}
+- {"type":"complete_project","match":"..."}
+- {"type":"delete_project","match":"..."}
+
+MANTRAS:
+- {"type":"add_mantra","text":"..."}
+- {"type":"remove_mantra","match":"substring of the mantra"}
+- {"type":"replace_mantra","match":"substring","text":"new wording"}
+
+SLEEP:
+- {"type":"log_sleep","score":0-10,"note":"optional","date":"YYYY-MM-DD or null for today"}
 
 Rules:
-- Times Sami mentions are Helsinki time (UTC+3 in summer). Convert to UTC for due_at. "in 2 hours" = current time + 2h.
-- If he asks to be reminded, set due_at accordingly; the reminder system pings at set checkpoints before the due time automatically (24h,12h,10h,8h,6h,4h,2h before and at expiry).
-- If due_at is within 2 hours, he will get the expiry-time reminder; mention when he'll be pinged in your reply.
-- Default priority "med" unless he signals urgency.
-- If he's asking a question (not requesting an action), use an empty actions array and answer from the context data.
-- Be concise, warm, and direct in replies. Plain text only (no markdown). Use Helsinki local times when mentioning times to him.
-- If the request is ambiguous, don't guess wildly: do the most reasonable interpretation and say what you did.
-- You have his full dashboard data in the user message. Answer questions about todos, projects, habits, streaks, sleep, and mantras from it accurately.`;
+- Times Sami mentions are Helsinki time (UTC+3 in summer). Convert to UTC for due_at.
+- Reminders: the system pings automatically at 24h,12h,10h,8h,6h,4h,2h before due and at expiry.
+- Default priority "med". For questions, use empty actions and answer from context.
+- Be concise, warm, direct. Plain text replies, no markdown. Helsinki local times in replies.
+- Do the most reasonable interpretation of ambiguous requests and say what you did.
+- You can chain multiple actions in one message when asked.
+- You have his full dashboard data in the user message: todos, projects, habits (with 14-day history), mantras, sleep. Answer accurately from it.`;
 
 async function askClaude(userMessage, context){
   const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -80,7 +106,7 @@ async function askClaude(userMessage, context){
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5',
-      max_tokens: 1000,
+      max_tokens: 1200,
       system: SYSTEM_PROMPT,
       messages: [
         { role: 'user', content: `DASHBOARD DATA:\n${JSON.stringify(context)}\n\nSAMI'S MESSAGE:\n${userMessage}` }
@@ -94,31 +120,128 @@ async function askClaude(userMessage, context){
   return JSON.parse(clean);
 }
 
+async function findOne(supa, table, userId, field, match, extra){
+  let q = supa.from(table).select('*').eq('user_id', userId).ilike(field, `%${match}%`).limit(1);
+  if(extra) q = extra(q);
+  const { data } = await q;
+  return (data && data[0]) || null;
+}
+
+function histAsMap(h){
+  let hist = h.history || {};
+  if(Array.isArray(hist)){ const m={}; hist.forEach(d=>m[d]='done'); hist=m; }
+  return hist;
+}
+
 async function runActions(supa, userId, actions){
   const results = [];
   for(const a of (actions||[])){
     try{
+      /* ---- TODOS ---- */
       if(a.type === 'create_todo'){
-        await supa.from('todos').insert({
-          user_id: userId, text: a.text, pri: a.pri || 'med',
-          done: false, rank: 0, carried: false,
-          due_at: a.due_at || null, completed_at: null, last_checkpoint_sent: null
-        });
-        results.push(`created: ${a.text}`);
+        await supa.from('todos').insert({ user_id:userId, text:a.text, pri:a.pri||'med', done:false, rank:0, carried:false, due_at:a.due_at||null, completed_at:null, last_checkpoint_sent:null });
+        results.push(`todo created: ${a.text}`);
+      } else if(a.type === 'update_todo'){
+        const t = await findOne(supa,'todos',userId,'text',a.match);
+        if(!t){ results.push(`todo not found: ${a.match}`); continue; }
+        const upd = {};
+        if(a.text) upd.text = a.text;
+        if(a.pri) upd.pri = a.pri;
+        if(a.clear_due){ upd.due_at = null; upd.last_checkpoint_sent = null; }
+        else if(a.due_at){ upd.due_at = a.due_at; upd.last_checkpoint_sent = null; }
+        await supa.from('todos').update(upd).eq('id', t.id);
+        results.push(`todo updated: ${t.text}`);
       } else if(a.type === 'complete_todo'){
-        const { data } = await supa.from('todos').select('id,text').eq('user_id', userId).eq('done', false).ilike('text', `%${a.match}%`).limit(1);
-        if(data && data[0]){
-          await supa.from('todos').update({ done: true, completed_at: new Date().toISOString() }).eq('id', data[0].id);
-          results.push(`completed: ${data[0].text}`);
-        } else results.push(`not found: ${a.match}`);
+        const t = await findOne(supa,'todos',userId,'text',a.match,q=>q.eq('done',false));
+        if(!t){ results.push(`todo not found: ${a.match}`); continue; }
+        await supa.from('todos').update({ done:true, completed_at:new Date().toISOString() }).eq('id', t.id);
+        results.push(`todo completed: ${t.text}`);
+      } else if(a.type === 'uncomplete_todo'){
+        const t = await findOne(supa,'todos',userId,'text',a.match,q=>q.eq('done',true));
+        if(!t){ results.push(`todo not found: ${a.match}`); continue; }
+        await supa.from('todos').update({ done:false, completed_at:null }).eq('id', t.id);
+        results.push(`todo reopened: ${t.text}`);
       } else if(a.type === 'delete_todo'){
-        const { data } = await supa.from('todos').select('id,text').eq('user_id', userId).ilike('text', `%${a.match}%`).limit(1);
-        if(data && data[0]){
-          await supa.from('todos').delete().eq('id', data[0].id);
-          results.push(`deleted: ${data[0].text}`);
-        } else results.push(`not found: ${a.match}`);
+        const t = await findOne(supa,'todos',userId,'text',a.match);
+        if(!t){ results.push(`todo not found: ${a.match}`); continue; }
+        await supa.from('todos').delete().eq('id', t.id);
+        results.push(`todo deleted: ${t.text}`);
+
+      /* ---- HABITS ---- */
+      } else if(a.type === 'create_habit'){
+        await supa.from('habits').insert({ user_id:userId, name:a.name, icon:a.icon||'\u2b50', cat:a.cat||'OTHER', type:'binary', streak:0, pb:0, status:'pending', rating:0, freezes:0, last_reset_date:todayHelsinki(), history:{} });
+        results.push(`habit created: ${a.name}`);
+      } else if(a.type === 'set_habit_today'){
+        const h = await findOne(supa,'habits',userId,'name',a.match);
+        if(!h){ results.push(`habit not found: ${a.match}`); continue; }
+        const map = histAsMap(h);
+        const d = todayHelsinki();
+        let status = a.status || 'done';
+        if(status === 'pending'){ delete map[d]; } else { map[d] = status; }
+        let streak = h.streak || 0;
+        if(status === 'done' && streak === 0) streak = 1;
+        await supa.from('habits').update({ status, history: map, streak }).eq('id', h.id);
+        results.push(`habit "${h.name}" today: ${status}`);
+      } else if(a.type === 'rename_habit'){
+        const h = await findOne(supa,'habits',userId,'name',a.match);
+        if(!h){ results.push(`habit not found: ${a.match}`); continue; }
+        await supa.from('habits').update({ name: a.name }).eq('id', h.id);
+        results.push(`habit renamed to: ${a.name}`);
+      } else if(a.type === 'delete_habit'){
+        const h = await findOne(supa,'habits',userId,'name',a.match);
+        if(!h){ results.push(`habit not found: ${a.match}`); continue; }
+        await supa.from('habits').delete().eq('id', h.id);
+        results.push(`habit deleted: ${h.name}`);
+
+      /* ---- PROJECTS ---- */
+      } else if(a.type === 'create_project'){
+        await supa.from('projects').insert({ user_id:userId, name:a.name, pct:0, due:a.due||'No deadline', tags:a.tags||[], tasks:a.tasks||[], done:false, archived:false, archived_date:null });
+        results.push(`project created: ${a.name}`);
+      } else if(a.type === 'update_project'){
+        const p = await findOne(supa,'projects',userId,'name',a.match,q=>q.eq('archived',false));
+        if(!p){ results.push(`project not found: ${a.match}`); continue; }
+        const upd = {};
+        if(a.name) upd.name = a.name;
+        if(a.pct !== null && a.pct !== undefined) upd.pct = Math.max(0, Math.min(100, a.pct));
+        if(a.due) upd.due = a.due;
+        if(a.add_task){ upd.tasks = [...(p.tasks||[]), a.add_task]; }
+        await supa.from('projects').update(upd).eq('id', p.id);
+        results.push(`project updated: ${p.name}`);
+      } else if(a.type === 'complete_project'){
+        const p = await findOne(supa,'projects',userId,'name',a.match,q=>q.eq('archived',false));
+        if(!p){ results.push(`project not found: ${a.match}`); continue; }
+        await supa.from('projects').update({ done:true, pct:100 }).eq('id', p.id);
+        results.push(`project completed: ${p.name}`);
+      } else if(a.type === 'delete_project'){
+        const p = await findOne(supa,'projects',userId,'name',a.match);
+        if(!p){ results.push(`project not found: ${a.match}`); continue; }
+        await supa.from('projects').delete().eq('id', p.id);
+        results.push(`project deleted: ${p.name}`);
+
+      /* ---- MANTRAS (single row, newline-joined content) ---- */
+      } else if(a.type === 'add_mantra' || a.type === 'remove_mantra' || a.type === 'replace_mantra'){
+        const { data: row } = await supa.from('mantras').select('*').eq('user_id', userId).maybeSingle();
+        let lines = (row && row.content) ? row.content.split('\n').filter(Boolean) : [];
+        if(a.type === 'add_mantra'){
+          lines.push(a.text);
+          results.push(`mantra added: ${a.text}`);
+        } else {
+          const idx = lines.findIndex(l => l.toLowerCase().includes((a.match||'').toLowerCase()));
+          if(idx === -1){ results.push(`mantra not found: ${a.match}`); continue; }
+          if(a.type === 'remove_mantra'){ results.push(`mantra removed: ${lines[idx]}`); lines.splice(idx,1); }
+          else { results.push(`mantra updated: ${a.text}`); lines[idx] = a.text; }
+        }
+        const content = lines.join('\n');
+        if(row){ await supa.from('mantras').update({ content }).eq('user_id', userId); }
+        else { await supa.from('mantras').insert({ user_id:userId, content }); }
+
+      /* ---- SLEEP ---- */
+      } else if(a.type === 'log_sleep'){
+        const d = a.date || todayHelsinki();
+        await supa.from('sleep_logs').upsert({ user_id:userId, log_date:d, score:a.score, note:a.note||'', updated_at:new Date().toISOString() });
+        results.push(`sleep logged ${d}: ${a.score}/10`);
       }
-    }catch(e){ results.push(`failed: ${e.message}`); }
+    }catch(e){ results.push(`failed (${a.type}): ${e.message}`); }
   }
   return results;
 }
@@ -130,7 +253,6 @@ module.exports = async function handler(req, res){
     const msg = update && update.message;
     if(!msg || !msg.text){ res.status(200).json({ok:true}); return; }
 
-    // Security: only respond to Sami's chat
     const allowedChat = String(process.env.TELEGRAM_CHAT_ID);
     if(String(msg.chat.id) !== allowedChat){ res.status(200).json({ok:true}); return; }
 
