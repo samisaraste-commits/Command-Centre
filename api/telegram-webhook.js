@@ -25,12 +25,13 @@ function helsinkiNowISO(){
 }
 
 async function gatherContext(supa, userId){
-  const [{ data: todos }, { data: projects }, { data: habits }, { data: mantraRow }, { data: sleep }] = await Promise.all([
+  const [{ data: todos }, { data: projects }, { data: habits }, { data: mantraRow }, { data: sleep }, { data: notes }] = await Promise.all([
     supa.from('todos').select('text,pri,done,due_at,completed_at').eq('user_id', userId),
     supa.from('projects').select('name,pct,due,tags,tasks,done,archived').eq('user_id', userId).eq('archived', false),
     supa.from('habits').select('name,icon,cat,type,streak,pb,status,history').eq('user_id', userId),
     supa.from('mantras').select('content').eq('user_id', userId).maybeSingle(),
-    supa.from('sleep_logs').select('log_date,score,note').eq('user_id', userId).order('log_date', {ascending:false}).limit(21)
+    supa.from('sleep_logs').select('log_date,score,note').eq('user_id', userId).order('log_date', {ascending:false}).limit(21),
+    supa.from('notes').select('content,created_at').eq('user_id', userId).order('created_at', {ascending:false}).limit(50)
   ]);
   const trimmedHabits = (habits||[]).map(h => {
     let hist = h.history || {};
@@ -46,7 +47,8 @@ async function gatherContext(supa, userId){
     projects: projects||[],
     habits: trimmedHabits,
     mantras: (mantraRow && mantraRow.content) ? mantraRow.content.split('\n').filter(Boolean) : [],
-    sleep_last_21_days: sleep||[]
+    sleep_last_21_days: sleep||[],
+    notes: notes||[]
   };
 }
 
@@ -86,6 +88,11 @@ MANTRAS:
 
 SLEEP:
 - {"type":"log_sleep","score":0-10,"note":"optional","date":"YYYY-MM-DD or null for today"}
+
+NOTES:
+- {"type":"create_note","content":"the note text, verbatim or lightly cleaned up"}
+- {"type":"delete_note","match":"substring of the note"}
+- If Sami sends a thought, idea, or observation and asks to save/note it (or it clearly reads as a note), create a note with it.
 
 Rules:
 - Times Sami mentions are Helsinki time (UTC+3 in summer). Convert to UTC for due_at.
@@ -234,6 +241,16 @@ async function runActions(supa, userId, actions){
         const content = lines.join('\n');
         if(row){ await supa.from('mantras').update({ content }).eq('user_id', userId); }
         else { await supa.from('mantras').insert({ user_id:userId, content }); }
+
+      /* ---- NOTES ---- */
+      } else if(a.type === 'create_note'){
+        await supa.from('notes').insert({ user_id:userId, content:a.content });
+        results.push(`note saved`);
+      } else if(a.type === 'delete_note'){
+        const n = await findOne(supa,'notes',userId,'content',a.match);
+        if(!n){ results.push(`note not found: ${a.match}`); continue; }
+        await supa.from('notes').delete().eq('id', n.id);
+        results.push(`note deleted`);
 
       /* ---- SLEEP ---- */
       } else if(a.type === 'log_sleep'){
