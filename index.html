@@ -333,7 +333,7 @@
 
         <div class="panel"><div class="ph"><div class="pt">Today's habits</div><button class="plink" onclick="nav('habits')">View all →</button></div><div id="ov-habits"></div></div>
         <div class="panel"><div class="ph"><div class="pt">Active projects</div><button class="plink" onclick="nav('projects')">View all →</button></div><div id="ov-projects"></div></div>
-        <div class="panel"><div class="ph"><div class="pt">To-Do</div><button class="plink" onclick="nav('todo')">View all →</button></div><div id="ov-todo"></div></div><div class="panel"><div class="ph"><div class="pt">Mantras</div><button class="plink" id="mantra-add-btn" onclick="startAddMantra()">+ Add</button></div><div id="ov-mantras"></div></div><div class="panel"><div class="ph"><div class="pt">Sleep Log</div></div><div id="sleep-entry"></div><div id="sleep-weeks"></div><div id="sleep-heatmap" style="margin-top:14px"></div></div>
+        <div class="panel"><div class="ph"><div class="pt">To-Do</div><button class="plink" onclick="nav('todo')">View all →</button></div><div id="ov-todo"></div></div><div class="panel"><div class="ph"><div class="pt">Mantras</div><button class="plink" id="mantra-add-btn" onclick="startAddMantra()">+ Add</button></div><div id="ov-mantras"></div></div><div class="panel"><div class="ph"><div class="pt">Notes</div></div><div id="notes-body"></div></div><div class="panel"><div class="ph"><div class="pt">Sleep Log</div></div><div id="sleep-entry"></div><div id="sleep-weeks"></div><div id="sleep-heatmap" style="margin-top:14px"></div></div>
       </div>
     </div>
     <div id="v-habits" class="view">
@@ -435,7 +435,7 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const {createClient}=supabase;
 const db=createClient(SUPA_URL,SUPA_KEY);
 let currentUser=null;
-const habits=[],projects=[],todos=[];
+const habits=[],projects=[],todos=[];let notes=[];
 function buildArchive(){
   const days=[],today=new Date();
   const samples=[
@@ -565,16 +565,17 @@ async function loadFromDB(){
   setLoading(true);
   const uid=currentUser.id;
   try{
-    const [{data:h},{data:p},{data:t},{data:m},{data:sl}]=await Promise.all([
+    const [{data:h},{data:p},{data:t},{data:m},{data:sl},{data:nt}]=await Promise.all([
       db.from('habits').select('*').eq('user_id',uid),
       db.from('projects').select('*').eq('user_id',uid),
       db.from('todos').select('*').eq('user_id',uid).order('rank'),
       db.from('mantras').select('content').eq('user_id',uid).maybeSingle(),
       db.from('sleep_logs').select('log_date,score,note').eq('user_id',uid),
+      db.from('notes').select('*').eq('user_id',uid).order('created_at',{ascending:false}),
     ]);
     habits.splice(0,habits.length,...(h||[]));
     projects.splice(0,projects.length,...(p||[]));
-    todos.splice(0,todos.length,...(t||[]));mantraText=(m&&m.content)?m.content:mantraText;sleepLogs={};(sl||[]).forEach(r=>{sleepLogs[r.log_date]={score:r.score,note:r.note||''};});
+    todos.splice(0,todos.length,...(t||[]));mantraText=(m&&m.content)?m.content:mantraText;sleepLogs={};(sl||[]).forEach(r=>{sleepLogs[r.log_date]={score:r.score,note:r.note||''};});notes=nt||[];
     saveCache();
     await checkDailyReset();
   }catch(e){console.error('Load error',e);if(!hasCached)showSave('error','⚠ Could not load data — check connection');}
@@ -742,7 +743,10 @@ function sleepWeekDaysHTML(year,week){const start=isoWeekStart(year,week);const 
 function toggleSleepWeek(k){sleepExpandedWeek=sleepExpandedWeek===k?null:k;renderSleepWeeks();}
 function renderSleepWeeks(){const el=document.getElementById('sleep-weeks');if(!el)return;const cw=isoWeek(new Date());const weeks=sleepWeeks();const cur=weeks.find(w=>w.year===cw.year&&w.week===cw.week);const curAvg=cur?(cur.sum/cur.count):null;const curKey=cw.year+'-'+cw.week;const curOpen=sleepExpandedWeek===curKey;let html=`<div onclick="toggleSleepWeek('${curKey}')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:8px 10px;margin:12px 0 4px"><div style="font-size:12px;color:var(--t1)">Week ${cw.week} <span style="color:var(--t3)">${curOpen?'▾':'▸'}</span></div><div style="font-size:15px;color:var(--o);font-weight:500">${curAvg!=null?curAvg.toFixed(1)+' /10':'—'}</div></div>`;if(curOpen)html+=sleepWeekDaysHTML(cw.year,cw.week);const hist=weeks.filter(w=>!(w.year===cw.year&&w.week===cw.week)).slice(0,12);if(hist.length){html+=`<div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1.5px;margin:8px 0 4px">History</div>`;hist.forEach(w=>{const a=w.sum/w.count;const k=w.year+'-'+w.week;const open=sleepExpandedWeek===k;html+=`<div onclick="toggleSleepWeek('${k}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:5px 2px;border-bottom:1px solid var(--bg4)"><div style="width:8px;height:8px;border-radius:2px;background:${sleepColor(Math.round(a))};flex-shrink:0"></div><div style="flex:1;font-size:12px;color:var(--t2)">Week ${w.week} <span style="color:var(--t3)">${open?'▾':'▸'}</span></div><div style="font-size:12px;color:var(--t1)">${a.toFixed(1)}</div></div>`;if(open)html+=sleepWeekDaysHTML(w.year,w.week);});}el.innerHTML=html;}
 function renderSleepHeatmap(){const el=document.getElementById('sleep-heatmap');if(!el)return;const weeks=12,days=7,today=new Date();let cols='';for(let w=weeks-1;w>=0;w--){let cells='';for(let dd=0;dd<days;dd++){const date=new Date(today);date.setDate(today.getDate()-((w*7)+(days-1-dd)));const isFuture=date>today;const ds=dateStr(date);const entry=sleepLogs[ds];const score=(entry&&entry.score!=null)?entry.score:null;const bg=isFuture?'#131313':sleepColor(score);cells+=`<div style="width:11px;height:11px;border-radius:2px;background:${bg}" title="${isFuture?'Future':ds+(score!=null?': '+score+'/10':' — no data')}"></div>`;}cols+=`<div style="display:flex;flex-direction:column;gap:2px">${cells}</div>`;}el.innerHTML=`<div style="font-size:10px;color:var(--o);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">12-week sleep map</div><div style="display:flex;gap:2px;overflow-x:auto">${cols}</div><div style="display:flex;align-items:center;gap:5px;margin-top:8px"><span style="font-size:9px;color:var(--t3)">Rough</span><div style="width:9px;height:9px;border-radius:2px;background:#E74C3C"></div><div style="width:9px;height:9px;border-radius:2px;background:#E8820C"></div><div style="width:9px;height:9px;border-radius:2px;background:#C8E830"></div><div style="width:9px;height:9px;border-radius:2px;background:#2ECC71"></div><span style="font-size:9px;color:var(--t3)">Great</span></div>`;}
-function renderAll(){renderScores();renderAlert();renderOvHabits();renderOvProjects();renderOvTodo();renderMantras();renderSleep();renderMissed();renderFullHabits();renderHeatmap();renderProjects();renderCarried();renderFullTodo();}
+function escN(x){return (x||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function renderNotes(){const el=document.getElementById('notes-body');if(!el)return;if(!notes.length){el.innerHTML='<div style="font-size:13px;color:var(--t3)">No notes yet — send one via Telegram.</div>';return;}el.innerHTML=notes.map(n=>`<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06)"><div style="flex:1;font-size:13.5px;color:var(--t2);line-height:1.45">${escN(n.content)}<div style="font-size:10px;color:var(--t3);margin-top:3px">${(n.created_at||'').slice(0,10)}</div></div><button onclick="deleteNote('${n.id}')" style="background:transparent;border:none;color:var(--t3);cursor:pointer;font-size:12px;padding:2px 6px">✕</button></div>`).join('');}
+async function deleteNote(id){notes=notes.filter(n=>n.id!==id);renderNotes();await db.from('notes').delete().eq('id',id);}
+function renderAll(){renderScores();renderAlert();renderOvHabits();renderOvProjects();renderOvTodo();renderMantras();renderSleep();renderNotes();renderMissed();renderFullHabits();renderHeatmap();renderProjects();renderCarried();renderFullTodo();}
 function showModal(title,body,okLabel,isRed,onOk){document.getElementById('m-title').textContent=title;document.getElementById('m-body').textContent=body;const btn=document.getElementById('m-ok');btn.textContent=okLabel;btn.className='modal-ok'+(isRed?' red':'');btn.onclick=()=>{closeModal();onOk();};document.getElementById('modal').style.display='flex';}
 function closeModal(){document.getElementById('modal').style.display='none';}
 function priLabel(p){if(p==='high')return '<span class="td-pri pri-high">High</span>';if(p==='med')return '<span class="td-pri pri-med">Med</span>';return '<span class="td-pri pri-low">Low</span>';}
