@@ -13,7 +13,7 @@ async function sendTelegram(text){
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '\u2197 Open dashboard', url: 'https://command-centre-liard.vercel.app' }]] } })
   });
 }
 
@@ -62,7 +62,7 @@ async function checkTodoReminders(supa, userId){
 
 async function maybeSendDigest(supa, userId){
   const { dateStr, hour } = helsinkiNow();
-  if(hour !== 10) return; // only fires in the 10:00 Helsinki hour
+  if(hour < 10) return; // fires on the first run at-or-after 10:00 Helsinki (GitHub's schedule can skip hours)
 
   const { data: state } = await supa.from('automation_state').select('*').eq('id', 1).single();
   if(state && state.last_digest_date === dateStr) return; // already sent today
@@ -76,7 +76,7 @@ async function maybeSendDigest(supa, userId){
     supa.from('todos').select('*').eq('user_id', userId).eq('done', false)
       .not('due_at', 'is', null).gte('due_at', `${dateStr}T00:00:00`).lt('due_at', `${dateStr}T23:59:59`),
     supa.from('projects').select('*').eq('user_id', userId).eq('archived', false),
-    supa.from('mantras').select('*').eq('user_id', userId).limit(1).maybeSingle()
+    supa.from('mantras').select('content').eq('user_id', userId).limit(1).maybeSingle()
   ]);
 
   let msg = `☀️ <b>Good morning — 10am check-in</b>\n\n`;
@@ -88,7 +88,7 @@ async function maybeSendDigest(supa, userId){
   msg += `\n\n<b>Open projects</b> (${(projects||[]).length})\n`;
   msg += (projects && projects.length) ? projects.map(p=>`• ${p.name} (${p.due||'no deadline'})`).join('\n') : '— none';
 
-  const mantraLines = (mantraRow && mantraRow.text) ? mantraRow.text.split('\n').filter(Boolean) : [];
+  const mantraLines = (mantraRow && mantraRow.content) ? mantraRow.content.split('\n').filter(Boolean) : [];
   msg += `\n\n<b>Mantras</b>\n`;
   msg += mantraLines.length ? mantraLines.map(m=>`✦ ${m}`).join('\n') : '— none set';
 
